@@ -2,7 +2,7 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
-## Unreleased
+## 0.2.1 (2026-11-08)
 
 ### Fixed
 - A launch option still being typed was lost if Settings was closed with Enter, Esc or the window's X; it's now kept.
