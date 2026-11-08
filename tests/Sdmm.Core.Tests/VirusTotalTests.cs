@@ -15,6 +15,17 @@ public class VirusTotalTests
     private static string FileJson(int malicious, int suspicious = 0) =>
         $$"""{ "data": { "id": "{{Sha}}", "type": "file", "attributes": { "last_analysis_stats": { "malicious": {{malicious}}, "suspicious": {{suspicious}}, "harmless": 0, "undetected": 60, "timeout": 2, "type-unsupported": 5 } } } }""";
 
+    [Theory]
+    [InlineData("me/MyMod", true)]          // a dev build from GitHub
+    [InlineData(null, true)]                // an imported zip
+    [InlineData("ficsit.app/SML", false)]   // SMR scans its uploads with VirusTotal itself
+    [InlineData("FICSIT.APP/SML", false)]
+    public void OnlyDevBuildsAndImportedZipsAreChecked(string? repo, bool expected)
+    {
+        var request = new Installing.InstallRequest(null!, new Installing.PackageSource(repo, "v1.0.0", "x.zip"));
+        Assert.Equal(expected, VirusTotalCheck.NeedsCheck(request));
+    }
+
     [Fact]
     public async Task LooksUpByHashAndReadsTheStats()
     {

@@ -160,9 +160,10 @@ public sealed partial class ModRow : ObservableObject
     public IReadOnlyList<ModProblem> Problems { get; }
 
     public ModRow(string modReference, DiscoveredMod? discovered, InstalledMod? installed, IReadOnlyList<BuildOption> builds,
-        bool onServer = false, IReadOnlyList<ModProblem>? problems = null)
+        bool onServer = false, IReadOnlyList<ModProblem>? problems = null, bool hosted = false)
     {
         ModReference = modReference;
+        Hosted = hosted;
         Discovered = discovered;
         Installed = installed;
         Builds = builds;
@@ -366,7 +367,7 @@ public sealed partial class ModRow : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSmr), nameof(Description), nameof(DisplayName), nameof(SmrAuthorsText), nameof(SmrStatsText),
         nameof(SmrReleaseText), nameof(SmrCompatText), nameof(SmrTagsText), nameof(SmrFullDescription), nameof(SmrPageUrl), nameof(SmrComparisonText),
-        nameof(SmrUpdateVersion), nameof(SmrInstallText), nameof(State), nameof(StateText), nameof(StateBrush), nameof(Owner), nameof(ByText), nameof(CanHandBack), nameof(HandBackTo), nameof(HandBackText), nameof(HandBackTip),
+        nameof(SmrUpdateVersion), nameof(State), nameof(StateText), nameof(StateBrush), nameof(Owner), nameof(ByText), nameof(CanHandBack), nameof(HandBackTo), nameof(HandBackText), nameof(HandBackTip),
         nameof(CanChooseSource), nameof(CanInstall), nameof(ActionText), nameof(InstallSourceText), nameof(InstallTip), nameof(ReleaseNotes))]
     private Sdmm.Core.Smr.SmrMod? _smr;
 
@@ -384,15 +385,6 @@ public sealed partial class ModRow : ObservableObject
             ? latest : null;
 
     /// <summary>
-    /// The SMR button in the details panel, or empty (button hidden) when there's nothing useful to
-    /// do: the SMR copy is already current, or another tool manages it and SMR has nothing newer.
-    /// </summary>
-    public string SmrInstallText => Installed is null ? "Install from SMR"
-        : SmrUpdateVersion is { } v ? $"Update to {v} from SMR"
-        : Installed.Owner == ModOwner.Sdmm && !IsFromSmr && Installed.Marker?.IsAdoptedCopy != true && Smr?.LatestRelease is { } r ? $"Switch to the SMR release ({r})"
-        : "";
-
-    /// <summary>
     /// Who this mod can be handed back to:
     /// <list type="bullet">
     /// <item>Taken over from a host's tool or a hand copy: back to that (SDMM's marker is removed).</item>
@@ -402,10 +394,13 @@ public sealed partial class ModRow : ObservableObject
     /// </summary>
     public HandBackKind HandBackTo => Installed is not { Owner: ModOwner.Sdmm, Marker: { } m } ? HandBackKind.None
         : m.AdoptedFrom == SdmmMarker.AdoptedFromOther ? HandBackKind.Release
-        : Smr is not null && (m.PreviousSmmMarker is { Length: > 0 } || m.Sha256 is { Length: 64 }) ? HandBackKind.Smm
+        : !Hosted && Smr is not null && (m.PreviousSmmMarker is { Length: > 0 } || m.Sha256 is { Length: 64 }) ? HandBackKind.Smm
         : HandBackKind.None;
 
     public bool CanHandBack => HandBackTo != HandBackKind.None;
+
+    /// <summary>On a hosted (SFTP/FTP) server, where SMM's own settings aren't read, so a hand-back to SMM isn't offered.</summary>
+    public bool Hosted { get; }
 
     public string HandBackText => HandBackTo switch
     {

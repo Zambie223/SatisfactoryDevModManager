@@ -10,9 +10,8 @@ namespace Sdmm.App;
 /// <summary>SDMM's own version and where its releases come from.</summary>
 public static class AppInfo
 {
-    // PLACEHOLDER until SDMM's GitHub repo exists: change Owner/Repo here. Each release needs a tag v<version>
-    // matching <Version> in Directory.Build.props, and the single-file exe from `build.ps1 -Publish` attached
-    // with exactly this asset name.
+    // SDMM's own GitHub repo. Each release needs a tag v<version> matching <Version> in Directory.Build.props, and the
+    // single-file exe from `build.ps1 -Publish` attached with exactly this asset name.
     public static readonly UpdateSource UpdateSource = new("Zambie223", "SatisfactoryDevModManager", "SatisfactoryDevModManager.exe");
 
     public static SemVersion Version { get; } = SemVersion.Parse(Sdmm.Core.Installing.Installer.ToolVersion);

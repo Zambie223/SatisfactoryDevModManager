@@ -40,6 +40,13 @@ public sealed class VirusTotalCheck(IVirusTotal vt, string checkedListPath)
 {
     public static readonly TimeSpan AnalysisTimeout = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Whether a package is checked here: dev builds and imported zips are. Files downloaded from SMR aren't, because
+    /// SMR runs every upload through VirusTotal before approving it, and only approved versions are installed.
+    /// </summary>
+    public static bool NeedsCheck(Installing.InstallRequest request) =>
+        request.Source.Repo?.StartsWith(Installing.ServerSync.SmrSourcePrefix, StringComparison.OrdinalIgnoreCase) != true;
+
     public async Task<IReadOnlyList<VtFileResult>> CheckAsync(IReadOnlyList<VtFile> files, bool upload, IProgress<string>? status = null,
         CancellationToken ct = default)
     {

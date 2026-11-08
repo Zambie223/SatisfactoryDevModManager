@@ -5,8 +5,8 @@ namespace Sdmm.Core.Diagnostics;
 /// <summary>
 /// SDMM's two log files, both next to the settings file:
 /// <list type="bullet">
-/// <item><b>crash.log</b>, always on: crashes (errors nothing else caught), with full details. At most
-/// <see cref="CrashMaxBytes"/>.</item>
+/// <item><b>crash.log</b>, always on: crashes (errors nothing else caught), with full details and the app version. It's
+/// only created when there is a crash. At most <see cref="CrashMaxBytes"/>.</item>
 /// <item><b>sdmm.log</b>, the detailed log, off by default (Settings → Storage): everything SDMM does to the machine and
 /// the network (file and folder changes in games and on servers, its own settings and cache files, SMM profile edits,
 /// web requests, programs it starts) plus errors and crashes. At most <see cref="MaxBytes"/>.</item>
@@ -26,6 +26,7 @@ public static class FileLog
     private static RollingFile? _detail;
     private static RollingFile? _crash;
     private static volatile bool _enabled;
+    private static string _version = "";
 
     /// <summary>Whether the detailed log is on. Cheap to check before building a message.</summary>
     public static bool Enabled => _enabled;
@@ -37,10 +38,12 @@ public static class FileLog
     public static string? CrashPath => _crash?.Path;
 
     /// <summary>Puts both logs in <paramref name="folder"/> and turns the detailed one on or off. Safe to call again.</summary>
-    public static void Configure(string folder, bool detailed)
+    /// <param name="version">The app version, written into each crash entry so a report says what crashed.</param>
+    public static void Configure(string folder, bool detailed, string? version = null)
     {
         lock (Gate)
         {
+            if (version is not null) _version = version;
             var detailPath = System.IO.Path.Combine(folder, FileName);
             if (_detail?.Path != detailPath)
             {
@@ -66,20 +69,15 @@ public static class FileLog
     /// <summary>An error with its type, message, inner errors and stack trace, in the detailed log.</summary>
     public static void WriteError(string area, string context, Exception ex) => Write(area, $"{context}: {ex}");
 
-    /// <summary>A crash: always written to crash.log, and to the detailed log too when that's on.</summary>
+    /// <summary>A crash: always written to crash.log (with the version and Windows build), and to the detailed log too when that's on.</summary>
     public static void WriteCrash(string context, Exception ex)
     {
+        var entry = $"{context} (SDMM {(_version.Length > 0 ? _version : "?")}, {Environment.OSVersion}): {ex}";
         lock (Gate)
         {
-            _crash?.Write("crash", $"{context}: {ex}");
-            if (_enabled) _detail?.Write("crash", $"{context}: {ex}");
+            _crash?.Write("crash", entry);
+            if (_enabled) _detail?.Write("crash", entry);
         }
-    }
-
-    /// <summary>A line in crash.log that isn't a crash itself (the version at startup, so a report says what crashed).</summary>
-    public static void WriteCrashContext(string message)
-    {
-        lock (Gate) _crash?.Write("start", message);
     }
 
     /// <summary>Closes both files (at exit).</summary>
@@ -95,7 +93,9 @@ public static class FileLog
     /// <summary>An append-only text file that drops its oldest lines when it grows past its limit.</summary>
     private sealed class RollingFile(string path, long maxBytes)
     {
+        private readonly long _max = maxBytes;
         private StreamWriter? _writer;
+        private long _nextTrimAt = maxBytes;
         public string Path { get; } = path;
 
         public void Write(string area, string message)
@@ -111,7 +111,7 @@ public static class FileLog
                 // One entry per line (continuation lines are indented), so a trim never cuts an entry's first line in half.
                 var text = message.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "\n    ");
                 _writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{area}] {text}");
-                if (_writer.BaseStream.Length > maxBytes) Trim();
+                if (_writer.BaseStream.Length > _nextTrimAt) Trim();
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -130,10 +130,13 @@ public static class FileLog
         private void Trim()
         {
             Close();
+            // If the file can't be replaced right now (say it's open in an editor without sharing), try again after
+            // another eighth of the limit rather than on every line.
+            _nextTrimAt = new FileInfo(Path).Length + _max / 8;
             byte[] tail;
             using (var f = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             {
-                long keep = Math.Min(maxBytes * 4 / 5, f.Length);
+                long keep = Math.Min(_max * 4 / 5, f.Length);
                 f.Seek(-keep, SeekOrigin.End);
                 tail = new byte[keep];
                 f.ReadExactly(tail);
@@ -142,10 +145,11 @@ public static class FileLog
             var tmp = Path + ".tmp";
             using (var f = new FileStream(tmp, FileMode.Create, FileAccess.Write))
             {
-                f.Write(Encoding.UTF8.GetBytes($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [log] Older lines were dropped to keep this file under {maxBytes / 1024} KB.\n"));
+                f.Write(Encoding.UTF8.GetBytes($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [log] Older lines were dropped to keep this file under {_max / 1024} KB.\n"));
                 f.Write(tail, start, tail.Length - start);
             }
             File.Move(tmp, Path, overwrite: true);
+            _nextTrimAt = _max;
         }
     }
 }

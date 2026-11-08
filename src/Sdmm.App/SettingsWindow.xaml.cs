@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Sdmm.App.ViewModels;
 using Sdmm.Core.Config;
 
@@ -58,6 +59,12 @@ public partial class SettingsWindow : Window
         // Hooked after the optional pre-expansion above, so opening from the welcome doesn't count as a step.
         TokenHelp.Expanded += (_, _) => _sequence.TokenHelpExpanded();
         _vm.CacheCleared += _sequence.CacheCleared;
+        // Launch options save when their box loses focus, which Enter (Save), Esc (Cancel) and the X skip; commit it here.
+        // They apply right away like the rest of Games & servers, so this happens whether or not Save was clicked.
+        Closing += (_, _) =>
+        {
+            if (Keyboard.FocusedElement is TextBox box) box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        };
         Closed += (_, _) =>
         {
             _vm.CacheCleared -= _sequence.CacheCleared;

@@ -197,6 +197,9 @@
                     <TextBlock Style="{StaticResource Header}" Text="VirusTotal check (optional)" />
                     <TextBlock Style="{StaticResource Hint}"
                                Text="Checks each mod file with VirusTotal the first time it's installed, using your own free VirusTotal key. A file that antivirus engines flag asks before installing; everything else just goes in the activity log. If VirusTotal can't be reached or the key's daily limit is used up, installing carries on and the log says what wasn't checked." />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Visibility="{Binding IsVariant, Source={x:Static local:Brand.Current}, Converter={StaticResource BoolToVis}}"
+                               Text="Downloads from SMR aren't checked here: SMR runs every upload through VirusTotal before approving it, and only approved versions are installed." />
                     <CheckBox Content="Check new mod files with VirusTotal before installing" IsChecked="{Binding VirusTotalEnabledDraft}" Margin="0,2,0,8" />
 
                     <Expander Header="How to get a free API key" Margin="0,0,0,10">

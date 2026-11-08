@@ -22,7 +22,7 @@ Multiplayer Status: tested and working with Indifferent Broccoli hosted servers 
 
 ## Dedicated servers (hosted or on your PC)
 
-SDMM manages dedicated servers rented from a host and dedicated servers running on your own PC the same way. Switch the top of the sidebar from **My game** to **Server** to manage a server's mods directly: the list then shows the server's mods, and Install, Update and Remove act on the server. Restart the server afterwards so it loads the change.
+SDMM manages dedicated servers rented from a host and dedicated servers running on your own PC the same way. Switch the top of the sidebar from **My game** to **Server** to manage a server's mods directly: the list then shows the server's mods, and Install, Update and Remove act on the server. Restart the server afterwards so it loads the change; a hosted server usually has to be stopped first (see below).
 
 Click **Add server…** (in Server mode, or under **Settings → Games & servers**) and pick the kind:
 

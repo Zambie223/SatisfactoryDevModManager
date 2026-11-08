@@ -2,6 +2,20 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## Unreleased
+
+### Fixed
+- A launch option still being typed was lost if Settings was closed with Enter, Esc or the window's X; it's now kept.
+- `crash.log` was created on every start (with a startup line) even without a crash. It's now only written when there's a crash, and each entry includes the SDMM version and Windows build.
+- Reading a hosted server that's running showed the "server is probably running" prompt again on every refresh. When you're only looking, it's now asked once per server per session; changes still always ask.
+- VirusTotal checks now keep to the free key's limit of 4 a minute across installs done one after another, instead of starting fresh for each.
+- When one dependency is needed by several mods with different version ranges, the banner now lists each mod's own range.
+- A few messages still named windows and buttons that have since been renamed ("Sources", "Check GitHub"); they now match.
+
+### Changed
+- Cached SMR logos not used for 30 days are deleted, so the cache doesn't keep growing; they're downloaded again when needed.
+- Updated System.Security.Cryptography.ProtectedData (which encrypts saved tokens, keys and passwords) to 10.0.14.
+
 ## 0.2.0 (2026-11-08)
 
 ### Added

@@ -17,7 +17,8 @@ public partial class App : Application
         base.OnStartup(e);
         // crash.log is always on; the settings (read later) decide whether the detailed log is too.
         var configPath = ConfigPath(e.Args);
-        Sdmm.Core.Diagnostics.FileLog.Configure(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(configPath))!, detailed: false);
+        Sdmm.Core.Diagnostics.FileLog.Configure(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(configPath))!, detailed: false,
+            version: Sdmm.Core.Installing.Installer.ToolVersion);
         AppDomain.CurrentDomain.UnhandledException += (_, a) =>
         {
             if (a.ExceptionObject is Exception ex) Sdmm.Core.Diagnostics.FileLog.WriteCrash("Unhandled error (SDMM is closing)", ex);

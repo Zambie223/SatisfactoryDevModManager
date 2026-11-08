@@ -24,12 +24,14 @@ public sealed class FileLogTests : IDisposable
     {
         FileLog.Configure(_tmp.Path, detailed: false);
         FileLog.Write("app", "should not appear");
+        Assert.False(File.Exists(_tmp.Combine(FileLog.CrashFileName))); // no crash, no crash.log
         FileLog.WriteCrash("Boom", new InvalidOperationException("broken"));
         FileLog.Close();
 
         Assert.False(File.Exists(_tmp.Combine(FileLog.FileName)));
         var crash = File.ReadAllText(_tmp.Combine(FileLog.CrashFileName));
-        Assert.Contains("[crash] Boom: System.InvalidOperationException: broken", crash);
+        Assert.Contains("[crash] Boom (SDMM ", crash);
+        Assert.Contains("System.InvalidOperationException: broken", crash);
     }
 
     [Fact]

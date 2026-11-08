@@ -93,7 +93,7 @@ public partial class MainWindow : Window, IDialogs
     private void ShowSettings(SettingsPage? page, bool expandTokenHelp, bool refreshAfter)
     {
         ShowPopup(new SettingsWindow(_vm, page, expandTokenHelp));
-        _vm.OnSourcesWindowClosed(refreshAfter && !_suppressRefreshAfterSources);
+        _vm.OnSettingsClosed(refreshAfter && !_suppressRefreshAfterSources);
     }
 
     // ---- IDialogs (marshalled to the UI thread, since remote connections call back from worker threads) ----

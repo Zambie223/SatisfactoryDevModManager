@@ -74,7 +74,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand), nameof(InstallCommand), nameof(RemoveCommand), nameof(SyncFromServerCommand), nameof(ApplySyncCommand), nameof(InstallFromZipCommand), nameof(TakeOverCommand), nameof(TakeOverAllCommand), nameof(RemoveFromSmmProfilesCommand),
-        nameof(InstallRowFromSmrCommand), nameof(UpdateAllCommand), nameof(HandBackCommand), nameof(HandBackAllCommand), nameof(InstallDependenciesCommand))]
+        nameof(UpdateAllCommand), nameof(HandBackCommand), nameof(HandBackAllCommand), nameof(InstallDependenciesCommand))]
     private bool _isBusy;
 
     /// <summary>Bound to the install pickers so the selection can't change mid-operation.</summary>
@@ -87,7 +87,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _status = "Ready";
     [ObservableProperty] private string _rateLimitText = "";
 
-    // Sources tab (one entry per line)
+    // Settings → Mod sources (one entry per line)
     [ObservableProperty] private string _usersText = "";
     [ObservableProperty] private string _orgsText = "";
     [ObservableProperty] private string _reposText = "";
@@ -129,7 +129,6 @@ public sealed partial class MainViewModel : ObservableObject
         _smm = SmmState.Load(_config.SmmDirectory);
         _verboseLogging = _config.VerboseLogging;
         ConfigureLogs();
-        Sdmm.Core.Diagnostics.FileLog.WriteCrashContext($"{AppInfo.Version} started");
 
         // Launch options are edited straight in the Games & servers list; save whenever one changes.
         Installs.CollectionChanged += (_, e) =>
@@ -510,7 +509,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void EnsureRowsMatchSelection()
     {
         if (_rowsFor is null || _rowsFor != SelectedInstall)
-            throw new InvalidOperationException("The mod list is out of date for the selected install. Click 'Check GitHub' and try again.");
+            throw new InvalidOperationException("The mod list is out of date for the selected install. Click 'Check for new mod builds' and try again.");
     }
 
     partial void OnIncludePrereleasesChanged(bool value)
@@ -582,8 +581,8 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Says that mods can't appear until sources are added, and offers to open Sources. Used at startup and by
-    /// "Check for new builds" when there are none.
+    /// Says that mods can't appear until sources are added, and offers to open Settings → Mod sources. Used at startup
+    /// and by "Check for new mod builds" when there are none.
     /// </summary>
     public void PromptForSources()
     {
@@ -592,7 +591,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (_dialogs.Confirm("Add mod sources",
                 "SDMM doesn't know where to look for mods yet, so the list stays empty.\n\n" +
                 "It finds dev builds in the GitHub releases of the users, organizations or repos you add under " +
-                "Sources (for example your own GitHub name and your friends').\n\nOpen Sources now?"))
+                "Settings → Mod sources (for example your own GitHub name and your friends').\n\nOpen Mod sources now?"))
             _dialogs.ShowSources();
     }
 
@@ -723,8 +722,17 @@ public sealed partial class MainViewModel : ObservableObject
             read = await Task.Run(() => ReadInstall(item));
         }
         // A hosted server whose Mods folder is locked is almost certainly running: say so now, not only in the banner.
-        while (fresh && read.LockError is { } locked && AskServerStopped(item, locked))
+        // Only once per server per session for reading (checking for builds re-reads it); changes always ask.
+        while (fresh && read.LockError is { } locked && !_lockPromptDeclined.Contains(item.Config.Key))
+        {
+            if (!AskServerStopped(item, locked))
+            {
+                _lockPromptDeclined.Add(item.Config.Key);
+                break;
+            }
             read = await Task.Run(() => ReadInstall(item));
+        }
+        if (read.LockError is null) _lockPromptDeclined.Remove(item.Config.Key);
         _scan = (item, read);
         var (target, installed, lockError, problems) = (read.Target, read.Mods, read.LockError, read.Problems);
         item.Status = $"{target}, {installed.Count} mod{(installed.Count == 1 ? "" : "s")}" + (lockError is null ? "" : " · Mods folder locked");
@@ -739,17 +747,17 @@ public sealed partial class MainViewModel : ObservableObject
                 .Where(b => b.Assets.ContainsKey(target) && (IncludePrereleases || !b.Prerelease))
                 .Select(b => new BuildOption(b)).ToList();
             byRef.TryGetValue(mod.ModReference, out var inst);
-            rows.Add(new ModRow(mod.ModReference, mod, inst, builds, item.IsServer, ProblemsFor(mod.ModReference)));
+            rows.Add(new ModRow(mod.ModReference, mod, inst, builds, item.IsServer, ProblemsFor(mod.ModReference), item.IsRemote));
         }
         // Dev builds installed here that are no longer in the sources, so they can still be removed.
         foreach (var inst in installed.Where(m => m.Owner == ModOwner.Sdmm && rows.All(r => !r.ModReference.Equals(m.ModReference, StringComparison.OrdinalIgnoreCase))))
-            rows.Add(new ModRow(inst.ModReference, null, inst, [], item.IsServer, ProblemsFor(inst.ModReference)));
+            rows.Add(new ModRow(inst.ModReference, null, inst, [], item.IsServer, ProblemsFor(inst.ModReference), item.IsRemote));
         // Usually only your sources' builds and SDMM's own installs are listed, never other tools' mods outside your
         // sources. With listAll every installed mod is listed, so any of them can be taken over.
         bool listAll = Brand.Current.IsVariant;
         foreach (var inst in installed.Where(m => listAll && m.Owner != ModOwner.Sdmm &&
                                                   rows.All(r => !r.ModReference.Equals(m.ModReference, StringComparison.OrdinalIgnoreCase))))
-            rows.Add(new ModRow(inst.ModReference, null, inst, [], item.IsServer, ProblemsFor(inst.ModReference)));
+            rows.Add(new ModRow(inst.ModReference, null, inst, [], item.IsServer, ProblemsFor(inst.ModReference), item.IsRemote));
         int problemCount = rows.Count(r => r.HasProblems);
         if (problemCount > 0) Log($"{item.Name}: {problemCount} installed mod(s) have problems; filter by 'Has problems' to see them.");
 
@@ -777,7 +785,6 @@ public sealed partial class MainViewModel : ObservableObject
         RemoveFromSmmProfilesCommand.NotifyCanExecuteChanged();
         HandBackCommand.NotifyCanExecuteChanged();
         HandBackAllCommand.NotifyCanExecuteChanged();
-        InstallRowFromSmrCommand.NotifyCanExecuteChanged();
         RefreshUpdateCount();
         BrowseSmrCommand.NotifyCanExecuteChanged();
         // Only the listed mods' dependencies: the normal mode doesn't list (or fix up) other tools' mods.
@@ -855,6 +862,9 @@ public sealed partial class MainViewModel : ObservableObject
         var problems = ModHealth.Check(mods, info.Changelist, item.IsRemote ? null : _smm, item.IsRemote ? null : item.Config.Path, fs);
         return new InstallRead(info.Target, mods, item.IsRemote ? ModsFolderAccess.Check(fs) : null, problems, info.Changelist);
     }
+
+    /// <summary>Servers whose "probably running" prompt was dismissed while just reading them (asked again once unlocked).</summary>
+    private readonly HashSet<string> _lockPromptDeclined = [];
 
     /// <summary>Shown under the server banner when the hosted server's Mods folder is locked; empty otherwise.</summary>
     [ObservableProperty] private string _serverLockText = "";
@@ -953,9 +963,9 @@ public sealed partial class MainViewModel : ObservableObject
             : !IsServerMode && !HasLocalInstalls ? (EmptyStateKind.NoInstall,
                 "No game installation is set up yet. Auto-detect finds Steam and Epic installs, or add the folder yourself.", "Games & servers…")
             : !HasSources ? (EmptyStateKind.NoSources,
-                "No mod sources yet. SDMM lists the dev builds it finds in the GitHub releases of the users, organizations or repos you add under Sources.", "Add sources…")
+                "No mod sources yet. SDMM lists the dev builds it finds in the GitHub releases of the users, organizations or repos you add under Settings → Mod sources.", "Add sources…")
             : (EmptyStateKind.NoMods,
-                "No mods found. Check for new builds, or check that your sources publish releases with Alpakit zips (<Mod>-Windows.zip and so on).", "");
+                "No mods found. Click Check for new mod builds, or check that your sources publish releases with Alpakit zips (<Mod>-Windows.zip and so on).", "");
     }
 
     [RelayCommand]
@@ -1038,7 +1048,6 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var r in Mods) ApplySmr(r);
         ModsView.Refresh();
         RefreshUpdateCount();
-        InstallRowFromSmrCommand.NotifyCanExecuteChanged();
 
         var logoDir = Path.Combine(CachePath, "smr-logos");
         var wanted = Mods.Select(r => r.Smr).OfType<Sdmm.Core.Smr.SmrMod>()
@@ -1056,9 +1065,30 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    private static int _logoCachePruned;
+
+    /// <summary>
+    /// Once per session: deletes cached SMR logos not refreshed for 30 days. Browsing SMR caches a logo per mod seen,
+    /// so without this the folder only ever grows. Ones still needed are downloaded again.
+    /// </summary>
+    private static void PruneLogoCache(string dir)
+    {
+        if (Interlocked.Exchange(ref _logoCachePruned, 1) == 1 || !Directory.Exists(dir)) return;
+        try
+        {
+            foreach (var f in new DirectoryInfo(dir).EnumerateFiles("*.img").Where(f => DateTime.UtcNow - f.LastWriteTimeUtc > TimeSpan.FromDays(30)))
+            {
+                f.Delete();
+                Sdmm.Core.Diagnostics.FileLog.Write("cache", $"pruned SMR logo {f.FullName}");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     /// <summary>Loads an SMR logo from the disk cache (a week old at most) or downloads it. Null if unavailable.</summary>
     internal static async Task<System.Windows.Media.ImageSource?> LoadLogoAsync(Sdmm.Core.Smr.SmrClient smr, Sdmm.Core.Smr.SmrMod mod, string dir)
     {
+        PruneLogoCache(dir);
         try
         {
             Directory.CreateDirectory(dir);
@@ -1231,7 +1261,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         DependencyBannerText = _unmet.Count == 0 ? ""
             : _unmet.Count == 1
-                ? $"{_unmet[0].ModReference} is {(_unmet[0].Installed is null ? "missing" : "the wrong version")}: {string.Join(", ", _unmet[0].Requirements.Select(r => r.NeededBy).Distinct())} need{(_unmet[0].Requirements.Select(r => r.NeededBy).Distinct().Count() == 1 ? "s" : "")} {_unmet[0].Requirements[0].RangeText}. The game won't start with it like this."
+                ? $"{_unmet[0].ModReference} is {(_unmet[0].Installed is null ? "missing" : "the wrong version")}: {string.Join(", ", _unmet[0].Requirements.Select(r => $"{r.NeededBy} needs {r.RangeText}").Distinct())}. The game won't start with it like this."
                 : $"{_unmet.Count} dependencies are missing or the wrong version: {string.Join(", ", _unmet.Select(n => n.ModReference))}. The game won't start with them like this.";
         InstallDependenciesCommand.NotifyCanExecuteChanged();
     }
@@ -1358,10 +1388,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Plans (with confirmations) and installs downloaded packages into an open install. False if refused or cancelled.</summary>
     /// <param name="installed">What's installed, when the caller just read it; saves the planner reading it again.</param>
+    /// <param name="virusTotalChecked">The caller already ran the VirusTotal check (before taking mods over).</param>
     private async Task<bool> InstallRequestsAsync(InstallItem item, OpenedInstall opened, IReadOnlyList<InstallRequest> requests, PackageCache cache,
-        IReadOnlyList<InstalledMod>? installed = null)
+        IReadOnlyList<InstalledMod>? installed = null, bool virusTotalChecked = false)
     {
-        if (!await VirusTotalGateAsync(requests)) return false;
+        if (!virusTotalChecked && !await VirusTotalGateAsync(requests)) return false;
         MarkChanged(requests.Select(r => r.Package.ModReference));
         var plan = await Task.Run(() => new InstallPlanner().Plan(opened.Install, requests, item.IsRemote ? null : _smm, installed));
         foreach (var w in plan.Issues.Where(i => i.Level == IssueLevel.Warning)) Log($"Note: {w.Message}");
@@ -1842,7 +1873,7 @@ public sealed partial class MainViewModel : ObservableObject
         });
     }
 
-    // ---- sources tab ------------------------------------------------------------------------------------
+    // ---- Settings → Mod sources ---------------------------------------------------------------------------
 
     /// <summary>The SMR checkbox in Settings; applied to <see cref="UseSmr"/> on Save.</summary>
     [ObservableProperty] private bool _useSmrDraft;
@@ -1873,7 +1904,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Called after Settings closes: checks GitHub again if sources or the token changed, so the
     /// list reflects them without another click. Waits if something else is running.
     /// </summary>
-    public void OnSourcesWindowClosed(bool refresh = true)
+    public void OnSettingsClosed(bool refresh = true)
     {
         OnPropertyChanged(nameof(HasSources));
         UpdateEmptyState();
@@ -2035,7 +2066,6 @@ public sealed partial class MainViewModel : ObservableObject
         RemoveFromSmmProfilesCommand.NotifyCanExecuteChanged();
         HandBackCommand.NotifyCanExecuteChanged();
         HandBackAllCommand.NotifyCanExecuteChanged();
-        InstallRowFromSmrCommand.NotifyCanExecuteChanged();
         RefreshUpdateCount();
         BrowseSmrCommand.NotifyCanExecuteChanged();
         // Which mods are listed depends on it; rebuild so the list matches.
@@ -2162,15 +2192,10 @@ public sealed partial class MainViewModel : ObservableObject
         if (item.IsServer) text.Append("\n\n" + ServerNote(item));
         if (!_dialogs.Confirm("Apply modpack", text.ToString())) return;
 
-        if (takeOver.Count > 0)
-        {
-            var adopted = await AdoptAsync(item, takeOver);
-            if (adopted.Count < takeOver.Count) return;
-            ReportStillHeldBySmm(await RemoveFromSmmProfilesAsync(item, adopted, profiles));
-        }
-
-        using var opened = await Task.Run(() => Open(item));
-        if (!await Task.Run(() => EnsureServerWritable(item, opened.Install))) return;
+        // Check the server can be changed, download and run the VirusTotal check before any takeover, so stopping at any
+        // of them (a locked server, a failed download, a warning) changes nothing.
+        using (var probe = await Task.Run(() => Open(item)))
+            if (!await Task.Run(() => EnsureServerWritable(item, probe.Install))) return;
         var cache = CreateCache();
         var installRequests = await DownloadBuildsAsync(builds, info.Target, cache);
         foreach (var v in smrInstall)
@@ -2179,8 +2204,18 @@ public sealed partial class MainViewModel : ObservableObject
             var pkg = await cache.GetSmrAsync(smr, v, info.Target);
             installRequests.Add(new InstallRequest(pkg, new PackageSource(SmrSourcePrefix + v.ModReference, "v" + v.Version, Path.GetFileName(pkg.ZipPath))));
         }
+        if (!await VirusTotalGateAsync(installRequests)) return;
+
+        if (takeOver.Count > 0)
+        {
+            var adopted = await AdoptAsync(item, takeOver);
+            if (adopted.Count < takeOver.Count) return;
+            ReportStillHeldBySmm(await RemoveFromSmmProfilesAsync(item, adopted, profiles));
+        }
+
+        using var opened = await Task.Run(() => Open(item));
         _smm = SmmState.Load(_config.SmmDirectory);
-        if (installRequests.Count > 0 && !await InstallRequestsAsync(item, opened, installRequests, cache, takeOver.Count == 0 ? installed : null)) return;
+        if (installRequests.Count > 0 && !await InstallRequestsAsync(item, opened, installRequests, cache, takeOver.Count == 0 ? installed : null, virusTotalChecked: true)) return;
         if (remove.Count > 0)
             await Task.Run(() =>
             {
@@ -2280,12 +2315,6 @@ public sealed partial class MainViewModel : ObservableObject
     public Task InstallFromSmrAsync(IReadOnlyList<Sdmm.Core.Smr.SmrRequest> requests) =>
         RunBusy(requests.Count == 1 ? $"Installing {requests[0].ModReference} from SMR…" : "Installing from SMR…", () => InstallFromSmrCoreAsync(requests));
 
-    private bool CanInstallFromSmr(ModRow? row) => !IsBusy && Brand.Current.IsVariant && row?.Smr is not null && SelectedInstall is not null;
-
-    /// <summary>Details panel: install or update this mod from SMR to the newest version that fits.</summary>
-    [RelayCommand(CanExecute = nameof(CanInstallFromSmr))]
-    private Task InstallRowFromSmrAsync(ModRow? row) => InstallFromSmrAsync([new Sdmm.Core.Smr.SmrRequest(row!.ModReference)]);
-
     /// <summary>Dev builds with a newer build in your sources (GitHub releases or imported zips).</summary>
     private List<ModRow> DevUpdates() => Mods.Where(r => r is { State: ModState.UpdateAvailable, IsFromSmr: false } && r.Latest is not null).ToList();
 
@@ -2383,16 +2412,10 @@ public sealed partial class MainViewModel : ObservableObject
         bool extra = plan.ToInstall.Count > requests.Count || plan.TakeOver.Count > 0;
         if ((askFirst || extra) && !_dialogs.Confirm("Install from SMR", text.ToString())) return;
 
-        if (plan.TakeOver.Count > 0)
-        {
-            var adopted = await AdoptAsync(item, plan.TakeOver);
-            if (adopted.Count < plan.TakeOver.Count) return; // AdoptAsync explained why
-            ReportStillHeldBySmm(await RemoveFromSmmProfilesAsync(item, adopted, profiles));
-        }
-
-        // Download (verified against SMR's hashes), then install with the usual checks.
-        using var opened = await Task.Run(() => Open(item));
-        if (!await Task.Run(() => EnsureServerWritable(item, opened.Install))) return;
+        // Check the server can be changed and download (verified against SMR's hashes) before any takeover, so a locked
+        // server or a failed download changes nothing.
+        using (var probe = await Task.Run(() => Open(item)))
+            if (!await Task.Run(() => EnsureServerWritable(item, probe.Install))) return;
         var cache = CreateCache();
         var installRequests = new List<InstallRequest>();
         foreach (var v in plan.ToInstall)
@@ -2403,6 +2426,16 @@ public sealed partial class MainViewModel : ObservableObject
             var pkg = await cache.GetSmrAsync(smr, v, info.Target);
             installRequests.Add(new InstallRequest(pkg, new PackageSource(SmrSourcePrefix + v.ModReference, "v" + v.Version, Path.GetFileName(pkg.ZipPath))));
         }
+
+        if (plan.TakeOver.Count > 0)
+        {
+            var adopted = await AdoptAsync(item, plan.TakeOver);
+            if (adopted.Count < plan.TakeOver.Count) return; // AdoptAsync explained why
+            ReportStillHeldBySmm(await RemoveFromSmmProfilesAsync(item, adopted, profiles));
+        }
+
+        // Install with the usual checks.
+        using var opened = await Task.Run(() => Open(item));
         _smm = SmmState.Load(_config.SmmDirectory);
         if (await InstallRequestsAsync(item, opened, installRequests, cache, plan.TakeOver.Count == 0 ? installed : null))
             Log($"Installed from SMR into {item.Name}: {string.Join(", ", plan.ToInstall.Select(v => $"{v.ModReference} {v.Version}"))}.");
@@ -2583,8 +2616,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Whether the row can be handed back here: to the host or a hand copy anywhere (it only removes SDMM's marker), to
     /// SMM only on a game on this PC (SMM's settings for remote servers aren't read).
     /// </summary>
-    private bool HandBackPossible(ModRow r) =>
-        r.HandBackTo == HandBackKind.Release || (r.HandBackTo == HandBackKind.Smm && SelectedInstall is { IsRemote: false });
+    private bool HandBackPossible(ModRow r) => r.HandBackTo != HandBackKind.None;
 
     private bool CanHandBack(ModRow? row) => !IsBusy && Brand.Current.IsVariant && row is not null && HandBackPossible(row);
 
@@ -2936,6 +2968,8 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _virusTotalKeyStatus = "";
 
     private string? VirusTotalKey => SecretProtector.Unprotect(_config.ProtectedVirusTotalKey);
+    private Sdmm.Core.Security.VirusTotalClient? _vtClient;
+    private string? _vtClientKey;
 
     public void SetVirusTotalKey(string key)
     {
@@ -2960,10 +2994,18 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private async Task<bool> VirusTotalGateAsync(IReadOnlyList<InstallRequest> requests)
     {
-        if (!_config.VirusTotalEnabled || VirusTotalKey is not { } key || requests.Count == 0) return true;
-        var files = requests.Select(r => new Sdmm.Core.Security.VtFile($"{r.Package.ModReference} {r.Package.Descriptor.EffectiveVersion}", r.Package.ZipPath, r.Package.Sha256)).ToList();
-        using var client = new Sdmm.Core.Security.VirusTotalClient(key);
-        var check = new Sdmm.Core.Security.VirusTotalCheck(client, Path.Combine(CachePath, "virustotal-checked.json"));
+        if (!_config.VirusTotalEnabled || VirusTotalKey is not { } key) return true;
+        var toCheck = requests.Where(Sdmm.Core.Security.VirusTotalCheck.NeedsCheck).ToList();
+        if (toCheck.Count == 0) return true;
+        var files = toCheck.Select(r => new Sdmm.Core.Security.VtFile($"{r.Package.ModReference} {r.Package.Descriptor.EffectiveVersion}", r.Package.ZipPath, r.Package.Sha256)).ToList();
+        // One client for the session, so the free key's 4-a-minute spacing holds across installs done one after another.
+        if (_vtClient is null || _vtClientKey != key)
+        {
+            _vtClient?.Dispose();
+            _vtClient = new Sdmm.Core.Security.VirusTotalClient(key);
+            _vtClientKey = key;
+        }
+        var check = new Sdmm.Core.Security.VirusTotalCheck(_vtClient, Path.Combine(CachePath, "virustotal-checked.json"));
         var before = Status;
         var results = await check.CheckAsync(files, _config.VirusTotalUpload, new Progress<string>(s => Status = s));
         Status = before;
