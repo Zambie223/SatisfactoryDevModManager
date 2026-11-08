@@ -2,7 +2,7 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
-## Unreleased
+## 0.2.2 (2026-11-08)
 
 ### Fixed
 - The grey placeholder text in the search box and the token and key boxes started to the left of where typing starts. It now lines up with the cursor. Text boxes keep their size.
