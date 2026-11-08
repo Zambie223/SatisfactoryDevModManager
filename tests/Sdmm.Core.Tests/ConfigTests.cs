@@ -45,6 +45,7 @@ public class ConfigTests
         cfg.Sources.Users.AddRange(["alice", "bob"]);
         cfg.Sources.Repos.Add("someone/SomeMod");
         cfg.Installs.Add(new InstallConfig { Name = "Server", Kind = InstallKind.Sftp, Host = "example.host", Port = 2022, Path = "/home/container" });
+        cfg.Installs.Add(new InstallConfig { Name = "Game", Path = "D:/Games/Satisfactory", LaunchOptions = "-DX12 -log" });
         cfg.Save(path);
 
         Assert.Contains("\"kind\": \"Sftp\"", File.ReadAllText(path));
@@ -52,6 +53,8 @@ public class ConfigTests
         Assert.Equal(["alice", "bob"], loaded.Sources.Users);
         Assert.Equal(["someone/SomeMod"], loaded.Sources.Repos);
         Assert.Equal((InstallKind.Sftp, "example.host", 2022), (loaded.Installs[0].Kind, loaded.Installs[0].Host, loaded.Installs[0].Port));
+        Assert.Equal("-DX12 -log", loaded.Installs[1].LaunchOptions);
+        Assert.Null(loaded.Installs[0].LaunchOptions);
     }
 
     [Theory]

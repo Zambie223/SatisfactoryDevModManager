@@ -19,7 +19,7 @@
             <Button DockPanel.Dock="Bottom" Style="{StaticResource SidebarAccentButton}" Content="Play Satisfactory" Tag="&#xE768;"
                     Command="{Binding PlayCommand}" Margin="0,8,0,0" Padding="12,9"
                     Visibility="{Binding IsClientMode, Converter={StaticResource BoolToVis}}"
-                    ToolTip="Starts the selected installation's own game exe" />
+                    ToolTip="Starts the selected installation's own game exe, with its launch options from Settings → Games &amp; servers" />
             <!-- Every setting lives in one window; the version sits under it so it's still visible at a glance.
                  (The activity log opens from the status bar under the mod list.) -->
             <TextBlock DockPanel.Dock="Bottom" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,2,0,0">

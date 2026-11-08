@@ -31,6 +31,11 @@ public sealed class InstallConfig
     /// later is refused, because it may mean someone is intercepting the connection.
     /// </summary>
     public string? TrustedFingerprint { get; set; }
+    /// <summary>
+    /// Games only: command-line switches passed to the game exe by Play (for example "-DX12 -log"), like a game's
+    /// launch options in Steam. Steam's own launch options don't apply, because Play starts the install's exe directly.
+    /// </summary>
+    public string? LaunchOptions { get; set; }
     /// <summary>Platform to assume when the host does not expose Engine/Binaries (see GameInstall.TargetOverride).</summary>
     [JsonConverter(typeof(JsonStringEnumConverter<Packaging.ModTarget>))]
     public Packaging.ModTarget? TargetOverride { get; set; }

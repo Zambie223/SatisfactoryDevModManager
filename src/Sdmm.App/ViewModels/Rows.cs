@@ -51,6 +51,29 @@ public sealed partial class InstallItem : ObservableObject
         _ => Config.UseFtps ? "Hosted server (FTPS)" : "Hosted server (FTP)",
     };
 
+    /// <summary>Raised when a setting was edited in the list (launch options), so the caller saves the settings.</summary>
+    public event Action<InstallItem>? Edited;
+
+    /// <summary>Launch options apply to games only; SDMM doesn't start servers.</summary>
+    public bool CanHaveLaunchOptions => !IsServer;
+
+    /// <summary>
+    /// The switches Play passes to the game exe, edited in Settings → Games &amp; servers. One line: line breaks become
+    /// spaces, and surrounding spaces are dropped.
+    /// </summary>
+    public string LaunchOptions
+    {
+        get => Config.LaunchOptions ?? "";
+        set
+        {
+            var clean = string.Join(' ', (value ?? "").Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+            if (clean == (Config.LaunchOptions ?? "")) return;
+            Config.LaunchOptions = clean.Length == 0 ? null : clean;
+            OnPropertyChanged();
+            Edited?.Invoke(this);
+        }
+    }
+
     public void Refresh()
     {
         OnPropertyChanged(nameof(Name));

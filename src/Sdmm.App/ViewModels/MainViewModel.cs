@@ -128,6 +128,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
         _smm = SmmState.Load(_config.SmmDirectory);
 
+        // Launch options are edited straight in the Games & servers list; save whenever one changes.
+        Installs.CollectionChanged += (_, e) =>
+        {
+            foreach (InstallItem i in e.NewItems ?? Array.Empty<InstallItem>())
+                i.Edited += item =>
+                {
+                    SaveConfig();
+                    Log(item.LaunchOptions.Length == 0 ? $"{item.Name}: launch options cleared." : $"{item.Name}: launch options set to \"{item.LaunchOptions}\".");
+                };
+        };
         foreach (var i in _config.Installs) Installs.Add(new InstallItem(i));
         LocalInstalls = new System.Windows.Data.ListCollectionView(Installs) { Filter = o => o is InstallItem { IsServer: false } };
         ServerInstalls = new System.Windows.Data.ListCollectionView(Installs) { Filter = o => o is InstallItem { IsServer: true } };
@@ -309,7 +319,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>
     /// Starts the selected install's own game exe, so a test copy runs the copy rather than the Steam install
-    /// (launching through Steam always starts the Steam install).
+    /// (launching through Steam always starts the Steam install). Its launch options (Settings → Games &amp; servers)
+    /// are passed on the command line, since Steam's own launch options don't apply to an exe started directly.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanUseLocalInstall))]
     private void Play()
@@ -322,8 +333,9 @@ public sealed partial class MainViewModel : ObservableObject
             _dialogs.Error("Play", $"No game exe (FactoryGameSteam.exe, FactoryGameEGS.exe or FactoryGame.exe) found in {root}.");
             return;
         }
-        Log($"Starting {exe}");
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = root });
+        var options = SelectedInstall.Config.LaunchOptions ?? "";
+        Log(options.Length == 0 ? $"Starting {exe}" : $"Starting {exe} {options}");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, options) { UseShellExecute = true, WorkingDirectory = root });
     }
 
     [RelayCommand]
@@ -1738,7 +1750,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (item is null) return;
         if (!item.IsRemote)
         {
-            _dialogs.Info("Local install", "Folders on this PC have no settings to edit. Remove it from the list and add it again to change the folder.");
+            _dialogs.Info("Local install", "Folders on this PC have no connection settings. A game's launch options are edited in the Launch options column of this list. To change the folder, remove it from the list and add it again.");
             return;
         }
         if (!_dialogs.EditServer(item.Config, TestServerDraftAsync, out var password)) return;

@@ -16,6 +16,10 @@ Multiplayer Status: tested and working with Indifferent Broccoli hosted servers 
 2. In SDMM, pick your game installation in the sidebar, click **Check for new mod builds**, select the mod, choose the build in the details panel, and click **Install**. The game must be closed.
 3. When you're done testing, click **Remove** in SDMM, then add the mod back in SMM. If you forget to remove it first, SMM simply replaces it, which is harmless.
 
+## Playing and launch options
+
+**Play Satisfactory** (bottom of the sidebar) starts the selected game's own exe, so a second copy of the game launches itself rather than your Steam install. To pass switches such as `-DX12` or `-log`, set that game's **Launch options** under **Settings → Games & servers**. Steam's own launch options don't apply here, because SDMM starts the exe directly.
+
 ## Dedicated servers (hosted or on your PC)
 
 SDMM manages dedicated servers rented from a host and dedicated servers running on your own PC the same way. Switch the top of the sidebar from **My game** to **Server** to manage a server's mods directly: the list then shows the server's mods, and Install, Update and Remove act on the server. Restart the server afterwards so it loads the change.
