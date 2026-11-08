@@ -22,7 +22,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid>
                         <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Background="{StaticResource ControlBrush}"
-                                 BorderThickness="0" Padding="30,6,6,6" />
+                                 BorderThickness="0" Padding="30,12,12,12" />
                         <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource SubtleTextBrush}"
                                    VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
                         <TextBlock Text="Search SMR" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="32,0,0,0"

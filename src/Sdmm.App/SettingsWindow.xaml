@@ -72,7 +72,7 @@
                                 <DataTemplate>
                                     <Grid>
                                         <TextBox Text="{Binding LaunchOptions, UpdateSourceTrigger=LostFocus}" Background="{StaticResource ControlOnPanelBrush}"
-                                                 BorderThickness="0" Padding="4,2" VerticalAlignment="Center"
+                                                 BorderThickness="0" Padding="8,4" VerticalAlignment="Center"
                                                  AutomationProperties.Name="{Binding Name, StringFormat=Launch options for {0}}"
                                                  ToolTip="Switches passed to this game when you click Play, for example -DX12 or -log"
                                                  Visibility="{Binding CanHaveLaunchOptions, Converter={StaticResource BoolToVis}}" />
@@ -159,7 +159,8 @@
                             <PasswordBox x:Name="TokenBox" PasswordChanged="OnTokenChanged"
                                          ToolTip="Paste your GitHub token, then click Save at the bottom of this window" />
                             <!-- Placeholder: PasswordBox has none of its own -->
-                            <TextBlock x:Name="TokenPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="9,0,0,0"
+                            <!-- 15 = border 1 + padding 12 + WPF's 2, where typed text starts -->
+                            <TextBlock x:Name="TokenPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="15,0,0,0"
                                        IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -214,7 +215,7 @@
                         <Grid Width="340">
                             <PasswordBox x:Name="VtKeyBox" PasswordChanged="OnVtKeyChanged" AutomationProperties.Name="VirusTotal API key"
                                          ToolTip="Paste your VirusTotal API key, then click Save at the bottom of this window" />
-                            <TextBlock x:Name="VtKeyPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="9,0,0,0" IsHitTestVisible="False">
+                            <TextBlock x:Name="VtKeyPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="15,0,0,0" IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Text" Value="Paste your VirusTotal API key here" />
