@@ -116,6 +116,7 @@ public static class SmmProfileEditor
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
             root.WriteTo(writer);
         File.Move(tmp, path, overwrite: true);
+        Diagnostics.FileLog.Write("smm", $"edited {path} ({string.Join(", ", changed)}); backup {backup}");
         return new SmmProfileEdit(changed, backup);
     }
 

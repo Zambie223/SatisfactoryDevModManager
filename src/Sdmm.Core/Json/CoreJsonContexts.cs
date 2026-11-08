@@ -19,6 +19,7 @@ namespace Sdmm.Core.Json;
 [JsonSerializable(typeof(AppConfig))]
 [JsonSerializable(typeof(EtagEntry))]
 [JsonSerializable(typeof(Modpacks.ModpackFile))]
+[JsonSerializable(typeof(List<string>))]
 internal sealed partial class CoreJsonContext : JsonSerializerContext;
 
 /// <summary>GitHub REST payloads use snake_case.</summary>

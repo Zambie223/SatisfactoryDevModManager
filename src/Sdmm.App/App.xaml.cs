@@ -15,6 +15,18 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // crash.log is always on; the settings (read later) decide whether the detailed log is too.
+        var configPath = ConfigPath(e.Args);
+        Sdmm.Core.Diagnostics.FileLog.Configure(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(configPath))!, detailed: false);
+        AppDomain.CurrentDomain.UnhandledException += (_, a) =>
+        {
+            if (a.ExceptionObject is Exception ex) Sdmm.Core.Diagnostics.FileLog.WriteCrash("Unhandled error (SDMM is closing)", ex);
+        };
+        TaskScheduler.UnobservedTaskException += (_, a) =>
+        {
+            Sdmm.Core.Diagnostics.FileLog.WriteCrash("Unobserved background error", a.Exception);
+            a.SetObserved();
+        };
         var key = InstanceKey(e.Args);
         _instance = new Mutex(initiallyOwned: true, @"Local\SDMM-" + key, out bool first);
         _wakeUp = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SDMM-show-" + key);
@@ -48,6 +60,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Sdmm.Core.Diagnostics.FileLog.Write("app", $"Exiting (code {e.ApplicationExitCode}).");
+        Sdmm.Core.Diagnostics.FileLog.Close();
         _instance?.Dispose();
         _wakeUp?.Dispose();
         base.OnExit(e);
@@ -57,7 +71,7 @@ public partial class App : Application
     private static string InstanceKey(string[] args)
     {
         int i = Array.IndexOf(args, "--config");
-        var path = i >= 0 && i + 1 < args.Length ? args[i + 1] : Sdmm.Core.Config.AppConfig.DefaultPath;
+        var path = ConfigPath(args);
         string full;
         try { full = System.IO.Path.GetFullPath(path).ToLowerInvariant(); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or System.IO.PathTooLongException) { full = path; }
@@ -65,9 +79,22 @@ public partial class App : Application
         return Convert.ToHexString(hash, 0, 8);
     }
 
+    /// <summary>The settings file in use: --config, or the default.</summary>
+    private static string ConfigPath(string[] args)
+    {
+        int i = Array.IndexOf(args, "--config");
+        return i >= 0 && i + 1 < args.Length ? args[i + 1] : Sdmm.Core.Config.AppConfig.DefaultPath;
+    }
+
+    /// <summary>
+    /// An error nothing else caught. It's written to crash.log (always, whatever the logging setting), and the app keeps
+    /// running, since most of these come from a single action rather than a broken state.
+    /// </summary>
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        MessageBox.Show(e.Exception.Message, $"{Brand.Current.Name}: unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+        Sdmm.Core.Diagnostics.FileLog.WriteCrash("Unexpected error", e.Exception);
+        var where = Sdmm.Core.Diagnostics.FileLog.CrashPath is { } p ? $"\n\nThe details were saved to:\n{p}\n\nIf this keeps happening, please report it on the project's GitHub Issues page and include that file (remove anything personal from it first)." : "";
+        MessageBox.Show(e.Exception.Message + where, $"{Brand.Current.Name}: unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
     }
 }

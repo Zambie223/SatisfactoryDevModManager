@@ -49,7 +49,7 @@ public sealed partial class SmrClient : IDisposable
 
     public SmrClient(HttpMessageHandler? handler = null)
     {
-        _http = handler is null ? new HttpClient() : new HttpClient(handler);
+        _http = new HttpClient(new Diagnostics.LoggingHandler(handler ?? new HttpClientHandler()));
         _http.Timeout = TimeSpan.FromSeconds(30);
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SatisfactoryDevModManager", Installing.Installer.ToolVersion));
     }

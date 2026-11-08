@@ -127,6 +127,9 @@ public sealed partial class MainViewModel : ObservableObject
             _config = new AppConfig();
         }
         _smm = SmmState.Load(_config.SmmDirectory);
+        _verboseLogging = _config.VerboseLogging;
+        ConfigureLogs();
+        Sdmm.Core.Diagnostics.FileLog.WriteCrashContext($"{AppInfo.Version} started");
 
         // Launch options are edited straight in the Games & servers list; save whenever one changes.
         Installs.CollectionChanged += (_, e) =>
@@ -161,6 +164,7 @@ public sealed partial class MainViewModel : ObservableObject
         Brand.Current.IsVariant = _config.Variant;
         LoadSourcesIntoForm();
         UpdateTokenStatus();
+        UpdateVirusTotalStatus();
         UpdateCacheSize();
         Log($"Settings: {_configPath}");
         Log($"Download cache: {CachePath}");
@@ -314,6 +318,7 @@ public sealed partial class MainViewModel : ObservableObject
             _dialogs.Error("Open Mods folder", $"{mods} does not exist.");
             return;
         }
+        Sdmm.Core.Diagnostics.FileLog.Write("process", $"explorer.exe \"{mods}\"");
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{mods}\"") { UseShellExecute = true });
     }
 
@@ -343,11 +348,13 @@ public sealed partial class MainViewModel : ObservableObject
     {
         // Only open web links; nothing else should be launched from a URL that came from GitHub data.
         if (url is null || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+        Sdmm.Core.Diagnostics.FileLog.Write("process", $"opening {uri.AbsoluteUri} in the browser");
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
     }
 
     public void Log(string line)
     {
+        Sdmm.Core.Diagnostics.FileLog.Write("app", line);
         var text = $"{DateTime.Now:HH:mm:ss}  {line}";
         var d = Application.Current?.Dispatcher;
         if (d is null || d.CheckAccess()) Append(text);
@@ -437,6 +444,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Status = "Failed: " + ex.Message;
             Log("ERROR: " + ex.Message);
+            Sdmm.Core.Diagnostics.FileLog.WriteError("error", status.TrimEnd('.', '…'), ex);
             _dialogs.Error(status.TrimEnd('.', '…'), Explain(ex));
             await RefreshTouchedAsync();
         }
@@ -1063,6 +1071,7 @@ public sealed partial class MainViewModel : ObservableObject
                 bytes = await smr.DownloadLogoAsync(mod.LogoUrl!);
                 if (bytes is null) return null;
                 await File.WriteAllBytesAsync(file, bytes);
+                Sdmm.Core.Diagnostics.FileLog.Write("cache", $"saved SMR logo {file}");
             }
             return DecodeImage(bytes);
         }
@@ -1103,6 +1112,40 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _config.CheckForUpdatesOnStartup = value;
         SaveConfig();
+    }
+
+    // ---- logs ---------------------------------------------------------------------------------------------------
+
+    /// <summary>The detailed log (Settings → Storage). Off by default; crash.log is written regardless.</summary>
+    [ObservableProperty] private bool _verboseLogging;
+
+    partial void OnVerboseLoggingChanged(bool value)
+    {
+        if (!value) Sdmm.Core.Diagnostics.FileLog.Write("log", "Detailed logging off.");
+        _config.VerboseLogging = value;
+        ConfigureLogs();
+        SaveConfig();
+        Log(value ? $"Detailed logging on: {Sdmm.Core.Diagnostics.FileLog.Path}" : "Detailed logging off.");
+        OnPropertyChanged(nameof(LogFolder));
+    }
+
+    /// <summary>Where both log files live: next to the settings file.</summary>
+    public string LogFolder => Path.GetDirectoryName(Path.GetFullPath(_configPath))!;
+
+    private void ConfigureLogs()
+    {
+        Sdmm.Core.Diagnostics.FileLog.Configure(LogFolder, _config.VerboseLogging);
+        if (_config.VerboseLogging)
+            Sdmm.Core.Diagnostics.FileLog.Write("app", $"{Brand.Current.Name} {AppInfo.Version} on {Environment.OSVersion}, .NET {Environment.Version}; settings {_configPath}");
+    }
+
+    /// <summary>Opens the folder holding the log files in Explorer.</summary>
+    [RelayCommand]
+    private void OpenLogFolder()
+    {
+        Directory.CreateDirectory(LogFolder);
+        Log($"Opening {LogFolder} in Explorer");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{LogFolder}\"") { UseShellExecute = true });
     }
 
     public string AppVersionText => $"v{AppInfo.Version}";
@@ -1318,6 +1361,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task<bool> InstallRequestsAsync(InstallItem item, OpenedInstall opened, IReadOnlyList<InstallRequest> requests, PackageCache cache,
         IReadOnlyList<InstalledMod>? installed = null)
     {
+        if (!await VirusTotalGateAsync(requests)) return false;
         MarkChanged(requests.Select(r => r.Package.ModReference));
         var plan = await Task.Run(() => new InstallPlanner().Plan(opened.Install, requests, item.IsRemote ? null : _smm, installed));
         foreach (var w in plan.Issues.Where(i => i.Level == IssueLevel.Warning)) Log($"Note: {w.Message}");
@@ -1817,6 +1861,9 @@ public sealed partial class MainViewModel : ObservableObject
         IncludeForks = s.IncludeForks;
         IncludeArchived = s.IncludeArchived;
         UseSmrDraft = UseSmr;
+        VirusTotalEnabledDraft = _config.VirusTotalEnabled;
+        VirusTotalUploadDraft = _config.VirusTotalUpload;
+        UpdateVirusTotalStatus();
     }
 
     /// <summary>Set when sources or the token changed; checked when Settings closes.</summary>
@@ -1873,6 +1920,14 @@ public sealed partial class MainViewModel : ObservableObject
             Log($"Sources saved: {updated.Users.Count} users, {updated.Orgs.Count} orgs, {updated.Repos.Count} repos.");
         }
         UseSmr = UseSmrDraft;
+        if (_config.VirusTotalEnabled != VirusTotalEnabledDraft || _config.VirusTotalUpload != VirusTotalUploadDraft)
+        {
+            _config.VirusTotalEnabled = VirusTotalEnabledDraft;
+            _config.VirusTotalUpload = VirusTotalUploadDraft;
+            SaveConfig();
+            Log(!VirusTotalEnabledDraft ? "VirusTotal checks off."
+                : $"VirusTotal checks on{(VirusTotalUploadDraft ? ", uploading files it hasn't seen" : ", looking files up by their SHA-256 only")}.");
+        }
         LoadSourcesIntoForm();
         return true;
     }
@@ -2870,6 +2925,69 @@ public sealed partial class MainViewModel : ObservableObject
         _sourcesChanged = true; // a token can reveal private repos and lifts the request limit, so check again
         UpdateTokenStatus();
         Log(token.Length == 0 ? "GitHub token removed." : "GitHub token saved (encrypted for your Windows account).");
+    }
+
+    // ---- VirusTotal (Settings → Security; off by default) ----------------------------------------------------------
+
+    /// <summary>The Security tab's checkboxes; applied on Save, like the sources.</summary>
+    [ObservableProperty] private bool _virusTotalEnabledDraft;
+    [ObservableProperty] private bool _virusTotalUploadDraft;
+    [ObservableProperty] private bool _hasVirusTotalKey;
+    [ObservableProperty] private string _virusTotalKeyStatus = "";
+
+    private string? VirusTotalKey => SecretProtector.Unprotect(_config.ProtectedVirusTotalKey);
+
+    public void SetVirusTotalKey(string key)
+    {
+        key = key.Trim();
+        _config.ProtectedVirusTotalKey = key.Length == 0 ? null : SecretProtector.Protect(key);
+        SaveConfig();
+        UpdateVirusTotalStatus();
+        Log(key.Length == 0 ? "VirusTotal API key removed." : "VirusTotal API key saved (encrypted for your Windows account).");
+    }
+
+    private void UpdateVirusTotalStatus()
+    {
+        HasVirusTotalKey = VirusTotalKey is not null;
+        VirusTotalKeyStatus = HasVirusTotalKey ? "Key saved." : "No key saved: nothing is checked until you add one.";
+    }
+
+    /// <summary>
+    /// Before installing: checks each mod file with VirusTotal the first time it's installed (when switched on and a
+    /// key is saved). A flagged file asks before going ahead; everything else only shows in the activity log, so the
+    /// check never gets in the way. VirusTotal being unreachable doesn't block installing (the log says what wasn't
+    /// checked). Returns false if the user stopped the install.
+    /// </summary>
+    private async Task<bool> VirusTotalGateAsync(IReadOnlyList<InstallRequest> requests)
+    {
+        if (!_config.VirusTotalEnabled || VirusTotalKey is not { } key || requests.Count == 0) return true;
+        var files = requests.Select(r => new Sdmm.Core.Security.VtFile($"{r.Package.ModReference} {r.Package.Descriptor.EffectiveVersion}", r.Package.ZipPath, r.Package.Sha256)).ToList();
+        using var client = new Sdmm.Core.Security.VirusTotalClient(key);
+        var check = new Sdmm.Core.Security.VirusTotalCheck(client, Path.Combine(CachePath, "virustotal-checked.json"));
+        var before = Status;
+        var results = await check.CheckAsync(files, _config.VirusTotalUpload, new Progress<string>(s => Status = s));
+        Status = before;
+        foreach (var r in results.Where(r => r.Outcome != Sdmm.Core.Security.VtOutcome.AlreadyChecked))
+            Log(r.Outcome switch
+            {
+                Sdmm.Core.Security.VtOutcome.Clean => $"VirusTotal: {r.File.Name} is clean ({r.Stats}).",
+                Sdmm.Core.Security.VtOutcome.Flagged => $"VirusTotal: {r.File.Name} is flagged ({r.Stats}). {r.ReportUrl}",
+                _ => $"VirusTotal: {r.File.Name} not checked: {r.Note}.",
+            });
+        var flagged = results.Where(r => r.Outcome == Sdmm.Core.Security.VtOutcome.Flagged).ToList();
+        if (flagged.Count == 0) return true;
+        var text = "VirusTotal flags " + (flagged.Count == 1 ? "this file" : "these files") + ":\n\n" +
+                   string.Join("\n", flagged.Select(r => $"• {r.File.Name}: {r.Stats}\n  {r.ReportUrl}")) +
+                   "\n\nA few detections on a new mod are often false alarms (unusual code, no reputation yet), but many usually aren't. " +
+                   "Open the report to see which engines flag it and why.\n\nInstall anyway?";
+        if (!_dialogs.Confirm("VirusTotal warning", text))
+        {
+            Log("Install stopped after VirusTotal's warning.");
+            return false;
+        }
+        check.MarkAccepted(flagged.Select(r => r.File.Sha256));
+        Log("Installing despite VirusTotal's warning (it won't be raised again for the same file).");
+        return true;
     }
 
     /// <summary>True when a readable token is saved; shows "Remove saved token" only then.</summary>

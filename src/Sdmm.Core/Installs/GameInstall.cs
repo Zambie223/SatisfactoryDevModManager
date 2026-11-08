@@ -22,10 +22,15 @@ public sealed class GameInstall
     ];
 
     public string Name { get; }
+
+    /// <summary>The install's files. Changes made through it are written to the detailed log when that's on.</summary>
     public IInstallFileSystem FileSystem { get; }
 
+    /// <summary>The file system as given (local folder, SFTP or FTP), without the logging wrapper.</summary>
+    public IInstallFileSystem UnderlyingFileSystem { get; }
+
     /// <summary>Local root folder, or null for remote installs.</summary>
-    public string? LocalRoot => (FileSystem as LocalInstallFileSystem)?.Root;
+    public string? LocalRoot => (UnderlyingFileSystem as LocalInstallFileSystem)?.Root;
 
     /// <summary>
     /// Platform to assume when no version file is reachable. Some rented hosts only expose the FactoryGame
@@ -37,7 +42,8 @@ public sealed class GameInstall
     public GameInstall(string name, IInstallFileSystem fileSystem, ModTarget? targetOverride = null)
     {
         Name = name;
-        FileSystem = fileSystem;
+        UnderlyingFileSystem = fileSystem is Diagnostics.LoggingInstallFileSystem logged ? logged.Inner : fileSystem;
+        FileSystem = new Diagnostics.LoggingInstallFileSystem(UnderlyingFileSystem);
         TargetOverride = targetOverride;
     }
 

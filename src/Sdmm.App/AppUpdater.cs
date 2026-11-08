@@ -74,6 +74,7 @@ public static class AppUpdater
             if (new FileInfo(NewPath).Length != update.Asset.Size)
                 throw new InvalidDataException("The downloaded update has the wrong size. Nothing was changed.");
 
+            Sdmm.Core.Diagnostics.FileLog.Write("update", $"downloaded {update.Tag} to {NewPath} (sha256 {hash}); swapping it in for {ExePath}");
             if (File.Exists(OldPath)) File.Delete(OldPath);
             File.Move(ExePath, OldPath);
             try
@@ -96,6 +97,7 @@ public static class AppUpdater
         var start = new ProcessStartInfo(ExePath) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(ExePath)! };
         foreach (var a in Environment.GetCommandLineArgs().Skip(1).Where(a => a != App.AfterUpdateArg)) start.ArgumentList.Add(a);
         start.ArgumentList.Add(App.AfterUpdateArg);
+        Sdmm.Core.Diagnostics.FileLog.Write("update", $"restarting {ExePath}");
         Process.Start(start);
     }
 

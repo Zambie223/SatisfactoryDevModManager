@@ -40,7 +40,7 @@ public sealed partial class GitHubClient : IDisposable
             AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.All,
         };
-        _http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
+        _http = new HttpClient(new Diagnostics.LoggingHandler(handler)) { Timeout = TimeSpan.FromMinutes(10) };
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SatisfactoryDevModManager", Installing.Installer.ToolVersion));
         _http.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
     }

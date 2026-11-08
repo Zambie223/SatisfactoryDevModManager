@@ -41,7 +41,7 @@ public static class InstallFactory
     /// <summary>Connects and checks the remote root exists. No-op for local installs.</summary>
     public static void TestConnection(OpenedInstall opened)
     {
-        switch (opened.Install.FileSystem)
+        switch (opened.Install.UnderlyingFileSystem)
         {
             case SftpInstallFileSystem s: s.TestConnection(); break;
             case FtpInstallFileSystem f: f.TestConnection(); break;

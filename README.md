@@ -140,9 +140,24 @@ When a dev mod is also published on SMR (ficsit.app), SDMM shows its logo, name 
 
 SDMM checks its own GitHub releases at startup; turn that off with **Check for updates at startup** under **Settings → Updates**, or check manually with **Check for SDMM updates** on the same tab. When an update is found, you can update now, be asked later, or skip that version. A skipped version isn't offered again at startup, but newer ones are. Updating downloads the new exe, verifies it against GitHub's SHA-256 checksum and restarts. A copy in a folder SDMM can't write to opens the release page instead.
 
+## Checking mod files with VirusTotal (optional)
+
+Under **Settings → Security**, SDMM can check each mod file with [VirusTotal](https://www.virustotal.com/) the first time it's installed, using your own free VirusTotal API key. It's off by default; the tab has short steps for getting a key. The key is stored encrypted for your Windows account, like the GitHub token, and only sent to virustotal.com.
+
+- A check sends only the file's SHA-256 fingerprint. If antivirus engines flag the file, SDMM shows how many and a link to the report, and asks before installing. Everything else goes in the activity log.
+- New dev builds usually aren't known to VirusTotal yet. To have those scanned too, turn on **Upload files VirusTotal hasn't seen yet**. That sends the whole file to VirusTotal, where its paying customers can download it, so leave it off for builds that aren't public. A first scan takes a minute or two.
+- Each file is checked once. If VirusTotal can't be reached or the free key's limit (4 checks a minute, 500 a day) is used up, installing carries on and the log says what wasn't checked.
+
 ## Where SDMM keeps its files
 
 SDMM is a single portable exe with no installer, and it doesn't need .NET installed. Its settings (`sdmm.config.json`), the download cache and imported zips live in `%LOCALAPPDATA%\SatisfactoryDevModManager`, so moving or re-downloading the exe keeps them. The cache keeps the newest 2 builds of each mod file and can be cleared under **Settings → Storage**. To put the cache on another drive, set `cacheDirectory` in the settings file. To use a different settings file, start SDMM with `--config <path>`.
+
+Logs go in the same folder:
+
+- `crash.log` is always written when SDMM hits an unexpected error. It stays under 1 MB.
+- `sdmm.log` is a detailed log of everything SDMM does: files it changes in your games and on servers, its own settings and cache files, changes to SMM's profiles, web requests, programs it starts, and errors in full. It's off by default; turn it on under **Settings → Storage**. It stays under 5 MB by dropping the oldest lines first.
+
+Logs include folder paths and server addresses, but never tokens, keys or passwords. **Settings → Storage → Open log folder** opens the folder.
 
 ## Reporting problems
 
@@ -151,7 +166,7 @@ Report bugs and other problems on this repository's [Issues](../../issues) page.
 - which SDMM version you're on (**Settings → Updates**),
 - whether it happened on your game or a server, and for a server, which host and whether it's SFTP or FTP,
 - what you did, what you expected, and what happened instead,
-- the relevant lines from the activity log (open it from the status bar under the mod list).
+- the relevant lines from the activity log (open it from the status bar under the mod list), or `crash.log` if SDMM showed an unexpected error. For a problem you can repeat, turn on the detailed log under **Settings → Storage**, repeat it, and attach `sdmm.log` (see [Where SDMM keeps its files](#where-sdmm-keeps-its-files)).
 
 Before posting, remove anything personal from what you paste, such as your Windows user name in folder paths, server addresses and user names. Never post a token or password.
 

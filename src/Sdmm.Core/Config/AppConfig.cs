@@ -86,6 +86,14 @@ public sealed class AppConfig
     public List<Modpacks.Modpack> Modpacks { get; set; } = [];
     /// <summary>True once game installs were auto-detected on first launch, so removed installs aren't added back.</summary>
     public bool InstallsAutoDetected { get; set; }
+    /// <summary>Check mod files with VirusTotal before installing them the first time (Settings → Security). Off by default.</summary>
+    public bool VirusTotalEnabled { get; set; }
+    /// <summary>Upload files VirusTotal hasn't seen. Off by default: uploaded files can be downloaded by VirusTotal's premium customers.</summary>
+    public bool VirusTotalUpload { get; set; }
+    /// <summary>The user's own VirusTotal API key, DPAPI-protected like the GitHub token.</summary>
+    public string? ProtectedVirusTotalKey { get; set; }
+    /// <summary>Write the detailed log (sdmm.log next to this file). Off by default; crash.log is written regardless.</summary>
+    public bool VerboseLogging { get; set; }
     /// <summary>Branding variant (see Brand in the app).</summary>
     public bool Variant { get; set; }
 
@@ -113,6 +121,7 @@ public sealed class AppConfig
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(this, CoreJsonContext.Default.AppConfig));
         File.Move(tmp, path, overwrite: true);
+        Diagnostics.FileLog.Write("config", $"saved settings to {path}");
     }
 }
 

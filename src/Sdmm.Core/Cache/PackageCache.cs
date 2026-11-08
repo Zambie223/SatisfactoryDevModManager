@@ -59,6 +59,7 @@ public sealed class PackageCache
                 throw new InvalidDataException($"{asset.Name}: downloaded {new FileInfo(part).Length} bytes, expected {asset.Size}.");
             File.Move(part, path, overwrite: true);
             File.WriteAllText(shaPath, hash);
+            Diagnostics.FileLog.Write("cache", $"downloaded {path} (sha256 {hash})");
         }
         finally
         {
@@ -97,6 +98,7 @@ public sealed class PackageCache
             var hash = ModPackage.ComputeSha256(part);
             File.Move(part, path, overwrite: true);
             File.WriteAllText(shaPath, hash);
+            Diagnostics.FileLog.Write("cache", $"downloaded {path} (sha256 {hash})");
             return ModPackage.Open(path, hash);
         }
         finally
@@ -115,7 +117,10 @@ public sealed class PackageCache
     public void Clear()
     {
         foreach (var dir in Sources.Select(s => Path.Combine(Root, s)).Where(Directory.Exists))
+        {
             Directory.Delete(dir, recursive: true);
+            Diagnostics.FileLog.Write("cache", $"deleted {dir}");
+        }
     }
 
     /// <summary>
@@ -147,6 +152,7 @@ public sealed class PackageCache
                 {
                     long size = old.Length;
                     old.Delete();
+                    Diagnostics.FileLog.Write("cache", $"pruned {old.FullName}");
                     freed += size;
                     var sha = new FileInfo(old.FullName + ".sha256");
                     if (sha.Exists) sha.Delete();

@@ -22,6 +22,7 @@
             <RadioButton x:Name="SourcesTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE943;" Content="Mod sources" Checked="OnTabChecked" />
             <RadioButton x:Name="TokenTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE8D7;" Content="GitHub token" Checked="OnTabChecked" />
             <RadioButton x:Name="SmrTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE719;" Content="SMR (ficsit.app)" Checked="OnTabChecked" />
+            <RadioButton x:Name="SecurityTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE72E;" Content="Security" Checked="OnTabChecked" />
             <RadioButton x:Name="StorageTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xEDA2;" Content="Storage" Checked="OnTabChecked" />
             <RadioButton x:Name="UpdatesTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE777;" Content="Updates" Checked="OnTabChecked" />
         </StackPanel>
@@ -31,11 +32,11 @@
         <DockPanel Grid.Column="1" Grid.Row="1" Margin="22,0,18,14">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Style="{StaticResource AccentButton}" Content="Save" IsDefault="True" Click="OnSave" MinWidth="90"
-                        ToolTip="Saves the sources, the token and the SMR setting, then closes" />
+                        ToolTip="Saves the sources, keys, the SMR setting and the security settings, then closes" />
                 <Button Content="Cancel" IsCancel="True" Margin="0" MinWidth="90" ToolTip="Closes without saving changes to the sources, the token or the SMR setting" />
             </StackPanel>
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,12,0" VerticalAlignment="Center"
-                       Text="Games, servers, storage and update settings take effect right away. Sources, the token and SMR are saved with Save." />
+                       Text="Games, servers, storage and update settings take effect right away. Sources, keys, SMR and security settings are saved with Save." />
         </DockPanel>
 
         <!-- ================= Pages ================= -->
@@ -190,6 +191,53 @@
                            Text="When a dev mod is also published on SMR, its logo and listing are shown next to the GitHub details. This sends the mod names to SMR's public API (one request per check); nothing else is sent." />
             </StackPanel>
 
+            <!-- ===== Security ===== -->
+            <ScrollViewer x:Name="SecurityPage" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,8,0">
+                    <TextBlock Style="{StaticResource Header}" Text="VirusTotal check (optional)" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Checks each mod file with VirusTotal the first time it's installed, using your own free VirusTotal key. A file that antivirus engines flag asks before installing; everything else just goes in the activity log. If VirusTotal can't be reached or the key's daily limit is used up, installing carries on and the log says what wasn't checked." />
+                    <CheckBox Content="Check new mod files with VirusTotal before installing" IsChecked="{Binding VirusTotalEnabledDraft}" Margin="0,2,0,8" />
+
+                    <Expander Header="How to get a free API key" Margin="0,0,0,10">
+                        <StackPanel Margin="18,8,0,4">
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">1. Create a free account at <Bold>virustotal.com</Bold> (Sign up, top right) and confirm your email.</TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">2. Sign in, click your profile picture (top right) and choose <Bold>API key</Bold>.</TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,8">3. Copy the key, paste it below and click <Bold>Save</Bold>. The free key allows 4 checks a minute and 500 a day, for personal, non-commercial use.</TextBlock>
+                            <Button Content="Open virustotal.com" Click="OnOpenVirusTotal" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </Expander>
+                    <StackPanel Orientation="Horizontal">
+                        <Grid Width="340">
+                            <PasswordBox x:Name="VtKeyBox" PasswordChanged="OnVtKeyChanged" AutomationProperties.Name="VirusTotal API key"
+                                         ToolTip="Paste your VirusTotal API key, then click Save at the bottom of this window" />
+                            <TextBlock x:Name="VtKeyPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="9,0,0,0" IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Paste your VirusTotal API key here" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasVirusTotalKey}" Value="True">
+                                                <Setter Property="Text" Value="Paste a new key to replace the saved one" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Button Style="{StaticResource GreyButton}" Content="Remove saved key" Click="OnClearVtKey" Margin="8,0,0,0"
+                                Visibility="{Binding HasVirusTotalKey, Converter={StaticResource BoolToVis}}" ToolTip="Deletes the saved key right away" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding VirusTotalKeyStatus}" Style="{StaticResource Hint}" Margin="0,6,0,0" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="The key is stored encrypted for your Windows account, like the GitHub token, and only sent to virustotal.com. A check sends only the file's SHA-256 fingerprint, not the file." />
+
+                    <CheckBox Content="Upload files VirusTotal hasn't seen yet" IsChecked="{Binding VirusTotalUploadDraft}" Margin="0,8,0,0"
+                              IsEnabled="{Binding VirusTotalEnabledDraft}" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="New dev builds usually aren't known to VirusTotal, so without this they're only noted in the log. Uploading sends the whole mod file to VirusTotal, where its paying customers can download it, so leave this off for builds that aren't public. A first scan takes a minute or two." />
+                </StackPanel>
+            </ScrollViewer>
+
             <!-- ===== Storage ===== -->
             <StackPanel x:Name="StoragePage">
                 <TextBlock Style="{StaticResource Header}" Text="Storage" />
@@ -216,6 +264,21 @@
                     <Button Style="{StaticResource GreyButton}" Content="Clear download cache" Command="{Binding ClearCacheCommand}" />
                     <Button Style="{StaticResource GreyButton}" Content="Delete imported zips" Command="{Binding ClearImportedCommand}" />
                 </StackPanel>
+
+                <Border Height="1" Background="{StaticResource LineBrush}" Margin="0,16,0,10" />
+                <TextBlock Style="{StaticResource Header}" Text="Logs" />
+                <CheckBox Content="Keep a detailed log file (for troubleshooting)" IsChecked="{Binding VerboseLogging}" Margin="0,4,0,0" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="Records everything SDMM does: files it changes in your games and on servers, its own settings and cache files, changes to SMM's profiles, web requests and programs it starts, plus errors in full. It's saved as sdmm.log and kept under 5 MB by dropping the oldest lines first. Crashes are always saved to crash.log, whether or not this is on. Logs include folder paths and server addresses, never tokens or passwords." />
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Log folder" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,14,0" />
+                    <TextBox Grid.Column="1" Text="{Binding LogFolder, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" />
+                </Grid>
+                <Button Style="{StaticResource GreyButton}" Content="Open log folder" Command="{Binding OpenLogFolderCommand}" HorizontalAlignment="Left" />
             </StackPanel>
 
             <!-- ===== Updates ===== -->

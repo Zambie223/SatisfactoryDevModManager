@@ -6,7 +6,7 @@ using Sdmm.Core.Config;
 namespace Sdmm.App;
 
 /// <summary>The tabs of the Settings window.</summary>
-public enum SettingsPage { Games, Sources, Token, Smr, Storage, Updates }
+public enum SettingsPage { Games, Sources, Token, Smr, Security, Storage, Updates }
 
 /// <summary>
 /// One window for every setting, with tabs down the side. Games &amp; servers, storage and update settings take effect
@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
             [SourcesTab] = (SettingsPage.Sources, SourcesPage),
             [TokenTab] = (SettingsPage.Token, TokenPage),
             [SmrTab] = (SettingsPage.Smr, SmrPage),
+            [SecurityTab] = (SettingsPage.Security, SecurityPage),
             [StorageTab] = (SettingsPage.Storage, StoragePage),
             [UpdatesTab] = (SettingsPage.Updates, UpdatesPage),
         };
@@ -92,6 +93,8 @@ public partial class SettingsWindow : Window
         }
         if (TokenBox.Password.Trim().Length > 0) _vm.SetToken(TokenBox.Password);
         TokenBox.Clear();
+        if (VtKeyBox.Password.Trim().Length > 0) _vm.SetVirusTotalKey(VtKeyBox.Password);
+        VtKeyBox.Clear();
         _saved = true;
         Close();
     }
@@ -140,6 +143,21 @@ public partial class SettingsWindow : Window
         if (typed) Dispatcher.BeginInvoke(() => TokenStatusText.BringIntoView(), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    private void OnVtKeyChanged(object sender, RoutedEventArgs e) =>
+        VtKeyPlaceholder.Visibility = VtKeyBox.Password.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+    private void OnClearVtKey(object sender, RoutedEventArgs e)
+    {
+        VtKeyBox.Clear();
+        _vm.SetVirusTotalKey("");
+    }
+
+    private void OnOpenVirusTotal(object sender, RoutedEventArgs e)
+    {
+        Sdmm.Core.Diagnostics.FileLog.Write("process", "opening virustotal.com in the browser");
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://www.virustotal.com/") { UseShellExecute = true });
+    }
+
     private void OnClearToken(object sender, RoutedEventArgs e)
     {
         TokenBox.Clear();
@@ -147,6 +165,9 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>Opens GitHub's "new fine-grained token" page in the default browser.</summary>
-    private void OnOpenTokenPage(object sender, RoutedEventArgs e) =>
+    private void OnOpenTokenPage(object sender, RoutedEventArgs e)
+    {
+        Sdmm.Core.Diagnostics.FileLog.Write("process", "opening GitHub's token page in the browser");
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/settings/personal-access-tokens/new") { UseShellExecute = true });
+    }
 }

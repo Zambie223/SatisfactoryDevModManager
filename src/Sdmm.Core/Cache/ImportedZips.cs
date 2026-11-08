@@ -44,6 +44,7 @@ public sealed class ImportedZips
         if (!Path.GetFullPath(zipPath).Equals(dest, StringComparison.OrdinalIgnoreCase))
             File.Copy(zipPath, dest, overwrite: true);
         File.WriteAllText(dest + ".sha256", pkg.Sha256);
+        Diagnostics.FileLog.Write("cache", $"imported {zipPath} as {dest} (sha256 {pkg.Sha256})");
         return ModPackage.Open(dest, pkg.Sha256);
     }
 
@@ -87,7 +88,9 @@ public sealed class ImportedZips
     /// <summary>Deletes every imported zip. Installed copies are not affected.</summary>
     public void Clear()
     {
-        if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
+        if (!Directory.Exists(Root)) return;
+        Directory.Delete(Root, recursive: true);
+        Diagnostics.FileLog.Write("cache", $"deleted {Root}");
     }
 
     /// <summary>

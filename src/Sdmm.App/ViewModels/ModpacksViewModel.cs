@@ -185,6 +185,7 @@ public sealed partial class ModpacksViewModel : ObservableObject
         var origin = await _main.GetExportOriginAsync();
         try
         {
+            Sdmm.Core.Diagnostics.FileLog.Write("modpack", $"exporting to {file}");
             File.WriteAllText(file, ModpackIO.Export(pack, origin?.Target ?? Sdmm.Core.Packaging.ModTarget.Windows, origin?.Changelist ?? 0));
             _main.Log($"Exported modpack '{pack.Name}' to {file}.");
         }
