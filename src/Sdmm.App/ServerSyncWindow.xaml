@@ -1,0 +1,78 @@
+<Window x:Class="Sdmm.App.ServerSyncWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        Title="Sync with server" Width="980" Height="560" MinWidth="700" MinHeight="360"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13">
+    <DockPanel Margin="18,14,18,16">
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}"
+                   Text="SML only lets you join when your mods agree with the server's: same versions (unless a mod's RemoteVersionRange allows others), and no mod on one side that the other needs. Mods only one side needs (RequiredOnRemote: false in their .uplugin, like the server-only DepotNetworkFix or client-only mods) are never copied to or removed from the other side. 'Compare' reads both sides; 'Match' installs and removes mods on the side being changed, for the ticked lines." />
+        <UniformGrid DockPanel.Dock="Top" Columns="2" Margin="0,0,0,10" MaxWidth="560" HorizontalAlignment="Left" IsEnabled="{Binding IsIdle}">
+            <RadioButton Style="{StaticResource TabButton}" GroupName="SyncDir" IsChecked="{Binding SyncGameMatchesServer}" AutomationProperties.Name="Make my game match the server">
+                <TextBlock Text="Make my game match the server" />
+            </RadioButton>
+            <RadioButton Style="{StaticResource TabButton}" GroupName="SyncDir" IsChecked="{Binding SyncServerMatchesGame}" AutomationProperties.Name="Make the server match my game">
+                <TextBlock Text="Make the server match my game" />
+            </RadioButton>
+        </UniformGrid>
+        <WrapPanel DockPanel.Dock="Top" Margin="0,4,0,10" VerticalAlignment="Center">
+            <TextBlock Text="Server" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,8,0" />
+            <ComboBox ItemsSource="{Binding ServerInstalls}" SelectedItem="{Binding SelectedServer}" DisplayMemberPath="Name" MinWidth="190"
+                      IsSynchronizedWithCurrentItem="False" Margin="0,0,14,0" IsEnabled="{Binding IsIdle}" Background="{StaticResource ControlOnPanelBrush}" />
+            <TextBlock Text="My game" VerticalAlignment="Center" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,8,0" />
+            <ComboBox ItemsSource="{Binding LocalInstalls}" SelectedItem="{Binding SelectedLocal}" DisplayMemberPath="Name" MinWidth="190"
+                      IsSynchronizedWithCurrentItem="False" Margin="0,0,18,0" IsEnabled="{Binding IsIdle}" Background="{StaticResource ControlOnPanelBrush}" />
+            <Button Content="Compare" Command="{Binding SyncFromServerCommand}" />
+            <Button Style="{StaticResource AccentButton}" Content="Match" Command="{Binding ApplySyncCommand}" />
+        </WrapPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgBrush}" CornerRadius="3" Padding="12,9" Margin="0,0,0,10">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasServers}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource SubtleTextBrush}">
+                <Run Text="&#xE946;" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource AccentBrush}" />
+                <Run Text="  No server is set up yet. Add one under Settings → Games &amp; servers → Add server…" />
+            </TextBlock>
+        </Border>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding SyncSummary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Visibility="{Binding SyncSummary, Converter={StaticResource EmptyToCollapsed}}" />
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="Close" IsCancel="True" Click="OnClose" Margin="0" />
+            <ProgressBar IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                         Width="120" HorizontalAlignment="Left" />
+        </DockPanel>
+        <DataGrid ItemsSource="{Binding SyncLines}" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="NaN"
+                  AutoGenerateColumns="False">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="" Width="62">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center"
+                                      Visibility="{Binding IsActionable, Converter={StaticResource BoolToVis}}"
+                                      ToolTip="Apply this line when matching the server" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Mod" Binding="{Binding Mod}" Width="170" IsReadOnly="True" />
+                <DataGridTextColumn Header="Server" Binding="{Binding Server}" Width="95" IsReadOnly="True" />
+                <DataGridTextColumn Header="My game" Binding="{Binding Local}" Width="95" IsReadOnly="True" />
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="150" IsReadOnly="True" />
+                <DataGridTextColumn Header="Details" Binding="{Binding Message}" Width="*" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextWrapping" Value="Wrap" />
+                            <Setter Property="Margin" Value="0,6" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,20 @@
+<Application x:Class="Sdmm.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Sdmm.App"
+            
+             DispatcherUnhandledException="OnUnhandledException">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <local:NullToCollapsedConverter x:Key="NullToCollapsed" />
+            <local:NullToVisibleConverter x:Key="NullToVisible" />
+            <local:AllTrueToVisibilityConverter x:Key="AllTrueToVis" />
+            <local:EmptyToVisibleConverter x:Key="EmptyToVisible" />
+            <local:EmptyToCollapsedConverter x:Key="EmptyToCollapsed" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,12 @@
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+TestResults/
+.cache/
+# Local config holds encrypted tokens and machine paths
+sdmm.config.json
+
+# Internal changelog: full history incl. local details; never published
+CHANGELOG.internal.md

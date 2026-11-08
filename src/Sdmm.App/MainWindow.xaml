@@ -1,0 +1,530 @@
+<Window x:Class="Sdmm.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        xmlns:vm="clr-namespace:Sdmm.App.ViewModels"
+        Title="{Binding Name, Source={x:Static local:Brand.Current}}" Height="780" Width="1320" MinWidth="980" MinHeight="560"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}"
+        Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}" FontSize="13"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="270" />
+            <ColumnDefinition Width="*" MinWidth="420" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ================= Sidebar ================= -->
+        <DockPanel Grid.Column="0" Margin="14,6,14,14">
+            <Button DockPanel.Dock="Bottom" Style="{StaticResource SidebarAccentButton}" Content="Play Satisfactory" Tag="&#xE768;"
+                    Command="{Binding PlayCommand}" Margin="0,8,0,0" Padding="12,9"
+                    Visibility="{Binding IsClientMode, Converter={StaticResource BoolToVis}}"
+                    ToolTip="Starts the selected installation's own game exe" />
+            <!-- Every setting lives in one window; the version sits under it so it's still visible at a glance.
+                 (The activity log opens from the status bar under the mod list.) -->
+            <TextBlock DockPanel.Dock="Bottom" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="2,2,0,0">
+                <Run Text="{Binding Short, Source={x:Static local:Brand.Current}, Mode=OneWay}" />
+                <Run Text="{Binding AppVersionText, Mode=OneWay}" />
+            </TextBlock>
+            <Button DockPanel.Dock="Bottom" Style="{StaticResource SidebarButton}" Content="Settings…" Tag="&#xE713;" Click="OnOpenSettings" Margin="0,8,0,0"
+                    ToolTip="Games and servers, mod sources, GitHub token, SMR, storage and updates" />
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- What the mod list manages: this PC's game, or the server directly -->
+                    <UniformGrid Columns="2" Margin="0,10,0,0" IsEnabled="{Binding IsIdle}">
+                        <RadioButton Style="{StaticResource TabButton}" GroupName="Mode" IsChecked="{Binding IsClientMode}" AutomationProperties.Name="My game"
+                                     ToolTip="Install and update mods in this PC's game">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE7FC;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="My game" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource TabButton}" GroupName="Mode" IsChecked="{Binding IsServerMode}" AutomationProperties.Name="Server"
+                                     ToolTip="Install and update mods directly on your dedicated server">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE968;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="Server" />
+                            </StackPanel>
+                        </RadioButton>
+                    </UniformGrid>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{Binding InstallPickerHeader}" Margin="2,12,0,8" />
+                    <ComboBox ItemsSource="{Binding LocalInstalls}" SelectedItem="{Binding SelectedLocal}" DisplayMemberPath="Name"
+                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding IsIdle}"
+                              Visibility="{Binding IsClientMode, Converter={StaticResource BoolToVis}}" />
+                    <ComboBox ItemsSource="{Binding ServerInstalls}" SelectedItem="{Binding SelectedServer}" DisplayMemberPath="Name"
+                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding IsIdle}"
+                              Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding SelectedInstall.Status}" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="2,6,0,0" TextWrapping="Wrap" />
+                    <Button Style="{StaticResource SidebarButton}" Content="Open Mods folder" Tag="&#xE8DA;" Command="{Binding OpenModsFolderCommand}" Margin="0,8,0,0"
+                            Visibility="{Binding IsEnabled, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVis}}"
+                            ToolTip="Opens this installation's Mods folder in Explorer" />
+                    <Button Style="{StaticResource SidebarButton}" Content="Add server…" Tag="&#xE710;" Command="{Binding AddServerInstallCommand}" Margin="0,8,0,0"
+                            Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}"
+                            ToolTip="A hosted server (SFTP/FTP login) or a dedicated server on this PC" />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Builds" />
+                    <Button Style="{StaticResource SidebarButton}" Content="Check for new mod builds" Tag="&#xE72C;" Command="{Binding RefreshCommand}" />
+                    <Button Style="{StaticResource SidebarButton}" Content="Install from zip…" Tag="&#xE8B5;" Command="{Binding InstallFromZipCommand}"
+                            ToolTip="Add mod zips that aren't on GitHub (for example your own Alpakit output). They're kept and listed with the other builds." />
+                    <Button Style="{StaticResource SidebarButton}" Content="Modpacks…" Tag="&#xE8F1;" Command="{Binding OpenModpacksCommand}"
+                            ToolTip="Save, import, export and apply sets of mods. The right files for a game or a server are picked automatically." />
+                    <CheckBox Content="Show prerelease builds" IsChecked="{Binding IncludePrereleases}" Margin="2,4,0,4" />
+                    <TextBlock Text="{Binding RateLimitText}" Foreground="{StaticResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="2,4,0,0" />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Multiplayer" />
+                    <Button Style="{StaticResource SidebarButton}" Content="Sync with server…" Tag="&#xE895;" Click="OnOpenServerSync"
+                            ToolTip="Compares your game with the server, and makes either one match the other so SML lets you join" />
+
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- ================= Mod list ================= -->
+        <Grid Grid.Column="1" Background="{StaticResource PanelBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Search and filter bar, then a row of SMR/SMM actions (when shown) so the search box keeps its room -->
+            <StackPanel Grid.Row="0" Background="{StaticResource BgBrush}">
+                <Grid Margin="12,8,12,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="140" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid>
+                        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Background="{StaticResource ControlBrush}"
+                                 BorderThickness="0" Padding="30,6,6,6" />
+                        <TextBlock Text="&#xE721;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource SubtleTextBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
+                        <TextBlock Text="Search mods" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="32,0,0,0"
+                                   IsHitTestVisible="False" Visibility="{Binding SearchText, Converter={StaticResource EmptyToVisible}}" />
+                    </Grid>
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:MainViewModel.FilterOptions}}"
+                              SelectedItem="{Binding SelectedFilter}" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding ModCountText}" Foreground="{StaticResource SubtleTextBrush}"
+                               VerticalAlignment="Center" Margin="12,0,2,0" />
+                    <Button Grid.Column="3" Style="{StaticResource AccentButton}" Command="{Binding UpdateAllCommand}" Margin="10,0,0,0" AutomationProperties.Name="{Binding UpdateAllText}" ToolTipService.ShowOnDisabled="True"
+                            ToolTip="Update every mod in this list that has a newer version. Shows what will change first.">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding UpdateAllText}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <!-- SMR catalog, hand back and takeover -->
+                <WrapPanel Margin="12,0,12,8"
+                           Visibility="{Binding IsVariant, Source={x:Static local:Brand.Current}, Converter={StaticResource BoolToVis}}">
+                    <Button Style="{StaticResource AccentButton}" Command="{Binding BrowseSmrCommand}" Margin="0,0,6,0" AutomationProperties.Name="Browse SMR"
+                            ToolTip="Search SMR (ficsit.app) and install mods with their dependencies into the selected game or server">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE719;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Browse SMR" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GreyButton}" Command="{Binding TakeOverAllCommand}" Margin="0,0,6,0" AutomationProperties.Name="Take over all"
+                            ToolTip="Make SDMM manage the mods in this list that SMM, the host or a hand copy installed: only the ones in your sources, or all of them. Asks first.">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8D7;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Take over all" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource GreyButton}" Command="{Binding HandBackAllCommand}" Margin="0" AutomationProperties.Name="Hand back all" ToolTipService.ShowOnDisabled="True"
+                            ToolTip="Give every mod SDMM took over back to its previous manager (the host, or SMM on games SMM manages), and SMR mods SDMM installed back to SMM. Asks first.">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Hand back all" />
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Row="1">
+            <!-- Server mode: say plainly that the list is the server's -->
+            <Border Background="{DynamicResource SelectionBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="0,0,0,2"
+                    Padding="14,8" Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE968;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TargetBannerText}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding ServerLockText}" TextWrapping="Wrap" Foreground="{StaticResource WarnBrush}" FontWeight="SemiBold"
+                                   Margin="0,4,0,0" Visibility="{Binding ServerLockText, Converter={StaticResource EmptyToCollapsed}}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <!-- Dependencies of the listed mods that are missing or the wrong version, with the fix one click away -->
+            <Border Background="{StaticResource BgBrush}" BorderBrush="{StaticResource WarnBrush}" BorderThickness="0,0,0,2" Padding="14,8"
+                    Visibility="{Binding DependencyBannerText, Converter={StaticResource EmptyToCollapsed}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{StaticResource WarnBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Margin="10,0,0,0" VerticalAlignment="Center"
+                            Command="{Binding InstallDependenciesCommand}" CommandParameter="{x:Null}" AutomationProperties.Name="Install missing dependencies"
+                            ToolTip="Install them from your GitHub sources (or SMR, where that's available). Shows what will change first.">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Install missing dependencies" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Text="{Binding DependencyBannerText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+            </StackPanel>
+
+            <ProgressBar Grid.Row="1" VerticalAlignment="Bottom" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+
+            <ListBox Grid.Row="2" x:Name="ModList" ItemsSource="{Binding ModsView}" SelectedItem="{Binding SelectedMod}"
+                     IsSynchronizedWithCurrentItem="False"
+                     ItemContainerStyle="{StaticResource ModRowItem}" Padding="0,4">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ModRow}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Width="58" Height="58" Margin="0,0,12,0">
+                                <Border CornerRadius="4" Background="{Binding TileBrush}">
+                                    <TextBlock Text="{Binding Initials}" FontFamily="Bahnschrift" FontWeight="Bold" FontSize="22"
+                                               Foreground="#F6F1E7" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <!-- SMR logo, when the mod is published there and the image could be decoded -->
+                                <Border CornerRadius="4" Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}">
+                                    <Border.Background>
+                                        <ImageBrush ImageSource="{Binding Logo}" Stretch="UniformToFill" />
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock TextTrimming="CharacterEllipsis">
+                                    <Run Text="{Binding DisplayName, Mode=OneWay}" FontSize="15" FontWeight="SemiBold" />
+                                    <Run Text="{Binding ByText, Mode=OneWay}" Foreground="{StaticResource SubtleTextBrush}" />
+                                    <Run Text="{Binding Owner, Mode=OneWay}" Foreground="{DynamicResource AccentBrush}" />
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border CornerRadius="3" BorderThickness="1" BorderBrush="{Binding OwnerBadgeBrush}" Padding="5,0" Margin="8,0,0,0"
+                                                ToolTip="{Binding OwnerBadgeTip}" Visibility="{Binding OwnerBadge, Converter={StaticResource EmptyToCollapsed}}">
+                                            <TextBlock Text="{Binding OwnerBadge}" Foreground="{Binding OwnerBadgeBrush}" FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+                                    </InlineUIContainer>
+                                </TextBlock>
+                                <TextBlock Text="{Binding Description}" Foreground="{StaticResource SubtleTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,3" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="{Binding StateBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <TextBlock Text="{Binding StateText}" Foreground="{Binding StateBrush}" FontSize="12" />
+                                    <TextBlock Text="{Binding InstalledSuffix}" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" />
+                                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0" ToolTip="{Binding ProblemsText}"
+                                                Visibility="{Binding HasProblems, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="12" Foreground="{StaticResource WarnBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,5,0" />
+                                        <TextBlock Text="{Binding ProblemShort}" Foreground="{StaticResource WarnBrush}" FontSize="12" FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource IconButton}" Content="&#xE896;" ToolTip="{Binding InstallTip}" ToolTipService.ShowOnDisabled="True"
+                                        Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                                <Button Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="{Binding RemoveTip}" ToolTipService.ShowOnDisabled="True"
+                                        Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- The search or filter hides every mod -->
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400"
+                        Visibility="{Binding NoMatchText, Converter={StaticResource EmptyToCollapsed}}">
+                <TextBlock Text="{Binding NoMatchText}" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                <Button Style="{StaticResource GreyButton}" Content="Show all mods" Command="{Binding ClearSearchCommand}"
+                        HorizontalAlignment="Center" Margin="0,12,0,0" Padding="16,6" />
+            </StackPanel>
+
+            <!-- Empty state -->
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding EmptyState}" Value="None">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="{Binding EmptyStateText}" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                <Button Style="{StaticResource AccentButton}" Content="{Binding EmptyStateButtonText}" Command="{Binding EmptyStateActionCommand}"
+                        HorizontalAlignment="Center" Margin="0,14,0,0" Padding="16,8"
+                        Visibility="{Binding EmptyStateButtonText, Converter={StaticResource EmptyToCollapsed}}" />
+            </StackPanel>
+
+            <!-- Activity log: one line when closed, full list when open -->
+            <Border Grid.Row="3" Background="{StaticResource BgBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0">
+                <DockPanel>
+                    <Button DockPanel.Dock="Top" Command="{Binding ToggleLogCommand}" HorizontalContentAlignment="Stretch"
+                            Background="Transparent" Margin="0" Padding="12,6">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center"
+                                       Foreground="{StaticResource SubtleTextBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="&#xE70E;" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLogOpen}" Value="True">
+                                                <Setter Property="Text" Value="&#xE70D;" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="{Binding LastLogLine}" Foreground="{StaticResource SubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Button>
+                    <ListBox x:Name="LogList" ItemsSource="{Binding LogLines}" ItemContainerStyle="{StaticResource LogItem}"
+                             FontFamily="Consolas" FontSize="12" Height="170"
+                             Visibility="{Binding IsLogOpen, Converter={StaticResource BoolToVis}}" />
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ================= Details panel ================= -->
+        <Border Grid.Column="2" Width="400" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BgBrush}" BorderThickness="6,0,0,0"
+                Visibility="{Binding SelectedMod, Converter={StaticResource NullToCollapsed}}">
+            <DockPanel Margin="18,16,18,14" DataContext="{Binding SelectedMod}">
+                <Button DockPanel.Dock="Bottom" Style="{StaticResource GreyButton}" Margin="0,10,0,0"
+                        Command="{Binding DataContext.CloseDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="&#xE8BB;" FontFamily="{StaticResource IconFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="Close" />
+                    </StackPanel>
+                </Button>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="84" Height="84" Margin="0,0,14,0">
+                                <Border CornerRadius="6" Background="{Binding TileBrush}">
+                                    <TextBlock Text="{Binding Initials}" FontFamily="Bahnschrift" FontWeight="Bold" FontSize="32"
+                                               Foreground="#F6F1E7" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <Border CornerRadius="6" Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}">
+                                    <Border.Background>
+                                        <ImageBrush ImageSource="{Binding Logo}" Stretch="UniformToFill" />
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                            <StackPanel VerticalAlignment="Center" MaxWidth="260">
+                                <TextBlock Text="{Binding DisplayName}" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Margin="0,2,0,0">
+                                    <Run Text="{Binding ByText, Mode=OneWay}" Foreground="{StaticResource SubtleTextBrush}" />
+                                    <Run Text="{Binding Owner, Mode=OneWay}" Foreground="{DynamicResource AccentBrush}" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding ModReference}" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,2,0,0" />
+                                <Border CornerRadius="3" BorderThickness="1" BorderBrush="{Binding OwnerBadgeBrush}" Padding="6,1" Margin="0,6,0,0"
+                                        HorizontalAlignment="Left" ToolTip="{Binding OwnerBadgeTip}"
+                                        Visibility="{Binding OwnerBadge, Converter={StaticResource EmptyToCollapsed}}">
+                                    <TextBlock Text="{Binding OwnerBadge}" Foreground="{Binding OwnerBadgeBrush}" FontSize="11" FontWeight="SemiBold" />
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Tabs: the dev build on GitHub vs. the published listing on SMR (only when the mod is on SMR) -->
+                        <UniformGrid Columns="2" Margin="0,16,0,0" Visibility="{Binding HasSmr, Converter={StaticResource BoolToVis}}">
+                            <RadioButton Style="{StaticResource TabButton}" GroupName="DetailsTab" IsChecked="{Binding ShowGitHubTab}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE943;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Dev build (GitHub)" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource TabButton}" GroupName="DetailsTab" IsChecked="{Binding ShowSmrTab}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE719;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Published (SMR)" />
+                                </StackPanel>
+                            </RadioButton>
+                        </UniformGrid>
+
+                        <!-- ===== GitHub (dev build) tab ===== -->
+                        <StackPanel Visibility="{Binding ShowGitHubTab, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding GitHubDescription}" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="0,14,0,0" />
+
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition /><RowDefinition /><RowDefinition />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Status:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,3" />
+                            <TextBlock Grid.Column="1" Text="{Binding StateText}" Foreground="{Binding StateBrush}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="1" Text="Installed here:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,3" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding InstalledText}" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="2" Text="Latest build:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,3" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LatestText}" FontWeight="SemiBold" />
+                        </Grid>
+                        <TextBlock Text="{Binding SmrComparisonText}" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Visibility="{Binding HasSmr, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding StateDetail}" Foreground="{StaticResource InfoBrush}" TextWrapping="Wrap" Margin="0,8,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StateDetail}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock Text="{Binding RemoteNote}" Foreground="{StaticResource InfoBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Visibility="{Binding RemoteNote, Converter={StaticResource EmptyToCollapsed}}" />
+                        <Border BorderBrush="{StaticResource WarnBrush}" BorderThickness="1" CornerRadius="3" Padding="10,8" Margin="0,10,0,0"
+                                Visibility="{Binding HasProblems, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Foreground="{StaticResource WarnBrush}" FontWeight="SemiBold">
+                                    <Run Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" /> <Run Text="Problems with the installed copy" />
+                                </TextBlock>
+                                <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}" Margin="0,6,0,0" />
+                                <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                        Visibility="{Binding HasUnmetDependencies, Converter={StaticResource BoolToVis}}"
+                                        ToolTip="Install what this mod needs from your GitHub sources (or SMR, where that's available). Shows what will change first."
+                                        Command="{Binding DataContext.InstallDependenciesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" Content="Install missing dependencies" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Style="{StaticResource Header}" Text="Install from" Margin="0,16,0,6">
+                            <TextBlock.Visibility>
+                                <MultiBinding Converter="{StaticResource AllTrueToVis}">
+                                    <Binding Path="IsVariant" Source="{x:Static local:Brand.Current}" />
+                                    <Binding Path="CanChooseSource" />
+                                </MultiBinding>
+                            </TextBlock.Visibility>
+                        </TextBlock>
+                        <UniformGrid Columns="2" Margin="0,0,0,4">
+                            <UniformGrid.Visibility>
+                                <MultiBinding Converter="{StaticResource AllTrueToVis}">
+                                    <Binding Path="IsVariant" Source="{x:Static local:Brand.Current}" />
+                                    <Binding Path="CanChooseSource" />
+                                </MultiBinding>
+                            </UniformGrid.Visibility>
+                            <RadioButton Style="{StaticResource TabButton}" GroupName="{Binding ModReference, StringFormat=src-{0}}" IsChecked="{Binding IsGitHubSource}"
+                                         AutomationProperties.Name="Dev build (GitHub)" Content="Dev build (GitHub)" />
+                            <RadioButton Style="{StaticResource TabButton}" GroupName="{Binding ModReference, StringFormat=src-{0}}" IsChecked="{Binding UseSmrSource}"
+                                         AutomationProperties.Name="SMR release" Content="SMR release" />
+                        </UniformGrid>
+                        <TextBlock Style="{StaticResource Header}" Text="Version" Margin="0,10,0,6" />
+                        <ComboBox ItemsSource="{Binding Builds}" SelectedItem="{Binding SelectedBuild}" DisplayMemberPath="Display"
+                                  Background="{StaticResource ControlOnPanelBrush}"
+                                  Visibility="{Binding IsGitHubSource, Converter={StaticResource BoolToVis}}" />
+                        <ComboBox ItemsSource="{Binding SmrVersions}" SelectedItem="{Binding SelectedSmrVersion}" DisplayMemberPath="Display"
+                                  Background="{StaticResource ControlOnPanelBrush}"
+                                  Visibility="{Binding UseSmrSource, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding InstallSourceText}" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                                   Visibility="{Binding InstallSourceText, Converter={StaticResource EmptyToCollapsed}}" />
+
+                        <Button Style="{StaticResource AccentButton}" Content="{Binding ActionText}" Margin="0,12,0,0" Padding="12,8"
+                                ToolTip="{Binding InstallTip}" ToolTipService.ShowOnDisabled="True"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}" />
+                        <!-- Take over a mod another tool installed, or hand it back -->
+                        <StackPanel Visibility="{Binding IsVariant, Source={x:Static local:Brand.Current}, Converter={StaticResource BoolToVis}}">
+                            <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" Padding="12,8" HorizontalContentAlignment="Center"
+                                    Visibility="{Binding CanTakeOver, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Make SDMM manage this mod from now on, so it can update or remove it. Asks first." AutomationProperties.Name="Take over"
+                                    Command="{Binding DataContext.TakeOverCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8D7;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Take over" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GreyButton}" Margin="0,8,0,0" Padding="12,8" HorizontalContentAlignment="Center"
+                                    Visibility="{Binding CanHandBack, Converter={StaticResource BoolToVis}}" ToolTipService.ShowOnDisabled="True"
+                                    ToolTip="{Binding HandBackTip}" AutomationProperties.Name="{Binding HandBackText}"
+                                    Command="{Binding DataContext.HandBackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72B;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding HandBackText}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource AccentButton}" Margin="0,8,0,0" Padding="12,8" HorizontalContentAlignment="Center"
+                                    Visibility="{Binding SmmWillReplace, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Take this mod out of the SMM profiles that list it, so SMM stops putting its version back. Asks first."
+                                    Command="{Binding DataContext.RemoveFromSmmProfilesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}" Content="Remove from SMM profiles" />
+                        </StackPanel>
+                        <UniformGrid Columns="2" Margin="0,8,0,0">
+                            <Button Style="{StaticResource GreyButton}" Content="Remove" Margin="0,0,4,0" HorizontalContentAlignment="Center"
+                                    Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}" />
+                            <Button Style="{StaticResource GreyButton}" Margin="4,0,0,0" HorizontalContentAlignment="Center"
+                                    Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding WebUrl}" Visibility="{Binding WebUrl, Converter={StaticResource NullToCollapsed}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="View on GitHub" />
+                                    <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </UniformGrid>
+
+                        <TextBlock Style="{StaticResource Header}" Text="Release notes" Margin="0,18,0,6" />
+                        <Border Background="{StaticResource BgBrush}" CornerRadius="3" Padding="10">
+                            <TextBlock Text="{Binding ReleaseNotes}" TextWrapping="Wrap" Foreground="{StaticResource SubtleTextBrush}" />
+                        </Border>
+                        </StackPanel>
+
+                        <!-- ===== SMR (published) tab ===== -->
+                        <StackPanel Visibility="{Binding ShowSmrTab, Converter={StaticResource BoolToVis}}" Margin="0,14,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Authors:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,4" />
+                                <TextBlock Grid.Column="1" Text="{Binding SmrAuthorsText}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="1" Text="Release:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,4" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SmrReleaseText}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="2" Text="Stats:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,4" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SmrStatsText}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="3" Text="Works on:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,4" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SmrCompatText}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="4" Text="Tags:" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,10,4" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SmrTagsText}" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" />
+                            </Grid>
+                            <Button Style="{StaticResource GreyButton}" Margin="0,12,0,0" HorizontalContentAlignment="Center"
+                                    Command="{Binding DataContext.OpenUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding SmrPageUrl}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="View on ficsit.app" />
+                                    <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Style="{StaticResource Header}" Text="Description" Margin="0,18,0,6" />
+                            <Border Background="{StaticResource BgBrush}" CornerRadius="3" Padding="10">
+                                <TextBlock Text="{Binding SmrFullDescription}" TextWrapping="Wrap" Foreground="{StaticResource SubtleTextBrush}" />
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>0.1.0</Version>
+    <Product>Satisfactory Dev Mod Manager</Product>
+    <Authors>Zambie223</Authors>
+    <Company>Zambie223</Company>
+    <Copyright>Copyright (C) 2026 Zambie223. Licensed under GPL-3.0-or-later.</Copyright>
+  </PropertyGroup>
+</Project>

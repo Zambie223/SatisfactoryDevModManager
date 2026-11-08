@@ -1,0 +1,222 @@
+<Window x:Class="Sdmm.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        Title="Settings" Width="960" Height="620" MinWidth="760" MinHeight="460"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ================= Tabs ================= -->
+        <Border Grid.RowSpan="2" Background="{StaticResource BgBrush}" Padding="0,14,10,14">
+        <StackPanel KeyboardNavigation.DirectionalNavigation="Cycle">
+            <RadioButton x:Name="GamesTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE7FC;" Content="Games &amp; servers" Checked="OnTabChecked" />
+            <RadioButton x:Name="SourcesTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE943;" Content="Mod sources" Checked="OnTabChecked" />
+            <RadioButton x:Name="TokenTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE8D7;" Content="GitHub token" Checked="OnTabChecked" />
+            <RadioButton x:Name="SmrTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE719;" Content="SMR (ficsit.app)" Checked="OnTabChecked" />
+            <RadioButton x:Name="StorageTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xEDA2;" Content="Storage" Checked="OnTabChecked" />
+            <RadioButton x:Name="UpdatesTab" Style="{StaticResource SideTab}" GroupName="SettingsTab" Tag="&#xE777;" Content="Updates" Checked="OnTabChecked" />
+        </StackPanel>
+        </Border>
+
+        <!-- ================= Save / Cancel ================= -->
+        <DockPanel Grid.Column="1" Grid.Row="1" Margin="22,0,18,14">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Style="{StaticResource AccentButton}" Content="Save" IsDefault="True" Click="OnSave" MinWidth="90"
+                        ToolTip="Saves the sources, the token and the SMR setting, then closes" />
+                <Button Content="Cancel" IsCancel="True" Margin="0" MinWidth="90" ToolTip="Closes without saving changes to the sources, the token or the SMR setting" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,0,12,0" VerticalAlignment="Center"
+                       Text="Games, servers, storage and update settings take effect right away. Sources, the token and SMR are saved with Save." />
+        </DockPanel>
+
+        <!-- ================= Pages ================= -->
+        <Grid Grid.Column="1" Margin="22,16,18,10">
+
+            <!-- ===== Games & servers ===== -->
+            <DockPanel x:Name="GamesPage">
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Header}" Text="Games &amp; servers" />
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}"
+                           Text="Your games and dedicated servers (hosted ones such as Indifferent Broccoli, or one on this PC). SDMM only ever changes mod folders it created itself (marked with .sdmm.json); SMM-managed and hand-installed mods are left alone." />
+                <WrapPanel DockPanel.Dock="Top" Margin="0,4,0,10">
+                    <Button Style="{StaticResource AccentButton}" Content="Auto-detect" Command="{Binding AutoDetectInstallsCommand}"
+                            ToolTip="Finds the game in Steam, Epic and SMM, and Steam's dedicated server on this PC" />
+                    <Button Content="Add game folder…" Command="{Binding AddLocalInstallCommand}" />
+                    <Button Content="Add server…" Command="{Binding AddServerInstallCommand}"
+                            ToolTip="A hosted server (SFTP/FTP login) or a dedicated server on this PC" />
+                </WrapPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Style="{StaticResource GreyButton}" Content="Test connection" Command="{Binding TestInstallCommand}" CommandParameter="{Binding SelectedInstallInList}" />
+                    <Button Style="{StaticResource GreyButton}" Content="Edit…" Command="{Binding EditInstallCommand}" CommandParameter="{Binding SelectedInstallInList}" />
+                    <Button Style="{StaticResource GreyButton}" Content="Remove from list" Command="{Binding RemoveInstallCommand}" CommandParameter="{Binding SelectedInstallInList}" />
+                </StackPanel>
+                <DataGrid ItemsSource="{Binding Installs}" SelectedItem="{Binding SelectedInstallInList}" IsReadOnly="True" SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="150" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="130" />
+                        <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="*" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="190" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <!-- ===== Mod sources ===== -->
+            <ScrollViewer x:Name="SourcesPage" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,8,0">
+                    <TextBlock Style="{StaticResource Header}" Text="Mod sources" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Where to look for mod releases. Every mode can be used together. A release counts when it has Alpakit zips named &lt;Mod&gt;-Windows.zip, &lt;Mod&gt;-WindowsServer.zip or &lt;Mod&gt;-LinuxServer.zip, and its tag is v&lt;SemVersion&gt;. One entry per line; GitHub links are accepted." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Style="{StaticResource Header}" Text="GitHub users" />
+                            <TextBlock Text="All of their repos are scanned" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding UsersText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="130" VerticalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Style="{StaticResource Header}" Text="GitHub organizations" />
+                            <TextBlock Text="All of the org's repos are scanned" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding OrgsText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="130" VerticalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Style="{StaticResource Header}" Text="Specific repos" />
+                            <TextBlock Text="owner/repo, always scanned" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding ReposText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="130" VerticalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Style="{StaticResource Header}" Text="Only scan repos with this topic (optional)" Margin="0,14,0,4" />
+                    <TextBox Text="{Binding Topic, UpdateSourceTrigger=PropertyChanged}" Width="260" HorizontalAlignment="Left" />
+                    <TextBlock Style="{StaticResource Hint}" Text="For example satisfactory-mod. Applies to user and org scans, not to specific repos. Leave empty to scan every repo." />
+                    <CheckBox x:Name="ForksBox" Content="Include forks" IsChecked="{Binding IncludeForks}" Checked="OnForksToggled" Unchecked="OnForksToggled" />
+                    <CheckBox Content="Include archived repos" IsChecked="{Binding IncludeArchived}" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ===== GitHub token ===== -->
+            <ScrollViewer x:Name="TokenPage" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,8,0">
+                    <TextBlock Style="{StaticResource Header}" Text="GitHub token (recommended)" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Raises GitHub's limit from 60 to 5,000 requests per hour, and lets SDMM read your private repos if you allow it. Use a read-only fine-grained token (steps below). It is stored encrypted for your Windows account and only sent to api.github.com." />
+                    <Expander x:Name="TokenHelp" Header="How to get a token (free, takes about a minute)" Margin="0,0,0,10">
+                        <StackPanel Margin="18,8,0,4">
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+                                1. Sign in to GitHub and open <Bold>Settings → Developer settings → Personal access tokens → Fine-grained tokens</Bold>,
+                                then click <Bold>Generate new token</Bold>. (The button below opens that page directly.)
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+                                2. Name it (for example "SDMM") and pick an expiration. When it expires, make a new one and save it here again.
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+                                3. Under <Bold>Repository access</Bold>, choose <Bold>Public repositories</Bold>. That is enough to read public mod releases.
+                                To also read your own private repos, choose <Bold>Only select repositories</Bold>, pick them, and set
+                                <Bold>Permissions → Contents</Bold> to <Bold>Read-only</Bold>. Don't grant anything else.
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+                                4. Click <Bold>Generate token</Bold> and copy it. GitHub shows it only once.
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,8">
+                                5. Paste it in the box below and click <Bold>Save</Bold>. Don't paste it anywhere else. You can revoke it on the same GitHub page at any time.
+                            </TextBlock>
+                            <Button Content="Open GitHub's token page" Click="OnOpenTokenPage" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </Expander>
+                    <StackPanel Orientation="Horizontal">
+                        <Grid Width="340">
+                            <PasswordBox x:Name="TokenBox" PasswordChanged="OnTokenChanged"
+                                         ToolTip="Paste your GitHub token, then click Save at the bottom of this window" />
+                            <!-- Placeholder: PasswordBox has none of its own -->
+                            <TextBlock x:Name="TokenPlaceholder" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="9,0,0,0"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Paste your token here, then click Save" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasToken}" Value="True">
+                                                <Setter Property="Text" Value="Paste a new token to replace the saved one" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Button Style="{StaticResource GreyButton}" Content="Remove saved token" Click="OnClearToken" Margin="8,0,0,0"
+                                Visibility="{Binding HasToken, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Deletes the saved token right away" />
+                    </StackPanel>
+                    <TextBlock x:Name="TokenSaveHint" Foreground="{DynamicResource AccentBrush}" Margin="0,6,0,0" Visibility="Collapsed"
+                               Text="Click Save below to store this token." />
+                    <TextBlock x:Name="TokenStatusText" Text="{Binding TokenStatus}" Style="{StaticResource Hint}" Margin="0,6,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ===== SMR ===== -->
+            <StackPanel x:Name="SmrPage">
+                <TextBlock Style="{StaticResource Header}" Text="SMR (ficsit.app)" />
+                <CheckBox Content="Look up mods on SMR for icons, descriptions and stats" IsChecked="{Binding UseSmrDraft}" Margin="0,4,0,0" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="When a dev mod is also published on SMR, its logo and listing are shown next to the GitHub details. This sends the mod names to SMR's public API (one request per check); nothing else is sent." />
+            </StackPanel>
+
+            <!-- ===== Storage ===== -->
+            <StackPanel x:Name="StoragePage">
+                <TextBlock Style="{StaticResource Header}" Text="Storage" />
+                <Grid Margin="0,4,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Settings file" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,14,6" />
+                    <TextBox Grid.Column="1" Text="{Binding ConfigPath, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="1" Text="Download cache" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,14,6" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding CachePath, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="2" Text="Cache size" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,14,6" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CacheSizeText}" Margin="0,0,0,6" />
+                    <TextBlock Grid.Row="3" Text="Imported zips" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,14,6" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ImportedSizeText}" Margin="0,0,0,6" />
+                </Grid>
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="The cache keeps the newest builds you downloaded, so reinstalling or switching back is instant. Imported zips (Install from zip) are never cleared automatically." />
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{StaticResource GreyButton}" Content="Clear download cache" Command="{Binding ClearCacheCommand}" />
+                    <Button Style="{StaticResource GreyButton}" Content="Delete imported zips" Command="{Binding ClearImportedCommand}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- ===== Updates ===== -->
+            <StackPanel x:Name="UpdatesPage">
+                <TextBlock Style="{StaticResource Header}" Text="Updates" />
+                <TextBlock Margin="0,4,0,10">
+                    <Run Text="{Binding Name, Source={x:Static local:Brand.Current}, Mode=OneWay}" />
+                    <Run Text="{Binding AppVersionText, Mode=OneWay}" Foreground="{StaticResource SubtleTextBrush}" />
+                </TextBlock>
+                <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Command="{Binding CheckForUpdatesCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE777;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding CheckUpdatesText, Source={x:Static local:Brand.Current}}" />
+                    </StackPanel>
+                </Button>
+                <CheckBox Content="Check for updates at startup" IsChecked="{Binding CheckUpdatesOnStartup}" Margin="0,12,0,0" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="Updates come from this app's GitHub releases. The new exe is checked against GitHub's SHA-256 checksum before it replaces this one." />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,41 @@
+<Window x:Class="Sdmm.App.WelcomeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        Title="Welcome" Width="600" SizeToContent="Height" ResizeMode="NoResize"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13">
+    <StackPanel Margin="24,20,24,20">
+        <StackPanel Orientation="Horizontal">
+            <Image Source="{Binding Logo, Source={x:Static local:Brand.Current}}" Width="72" Height="72" Margin="0,0,16,0" />
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name, Source={x:Static local:Brand.Current}, StringFormat='Welcome to {0}'}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="Test your team's dev builds before they go to the mod repository." Foreground="{StaticResource SubtleTextBrush}"
+                           TextWrapping="Wrap" Margin="0,4,0,0" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock TextWrapping="Wrap" Margin="0,20,0,0">
+            SDMM finds mod builds through GitHub. Without a GitHub token, GitHub allows only <Bold>60 requests per hour</Bold>,
+            which a few checks can use up. A free, read-only token raises that to <Bold>5,000</Bold> and takes about a minute to make.
+        </TextBlock>
+        <TextBlock Text="Would you like to add one now?" TextWrapping="Wrap" Margin="0,10,0,0" />
+
+        <WrapPanel HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Style="{StaticResource AccentButton}" Content="Add a token now" IsDefault="True" Click="OnNow" Padding="16,8" />
+            <Button Style="{StaticResource GreyButton}" Content="Ask me later" IsCancel="True" Click="OnLater" Padding="16,8" />
+            <Button Style="{StaticResource GreyButton}" Content="Don't ask again" Click="OnNever" Padding="16,8" Margin="0" />
+        </WrapPanel>
+
+        <Border Background="{StaticResource BgBrush}" CornerRadius="3" Padding="12,9" Margin="0,18,0,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource IconFont}" Foreground="{DynamicResource AccentBrush}"
+                           FontSize="14" VerticalAlignment="Top" Margin="0,1,10,0" />
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource SubtleTextBrush}">
+                    You can add or change your token at any time from the sidebar:
+                    <Bold>Settings → GitHub token</Bold>. SDMM works without one; it just hits GitHub's limit sooner.
+                </TextBlock>
+            </DockPanel>
+        </Border>
+    </StackPanel>
+</Window>

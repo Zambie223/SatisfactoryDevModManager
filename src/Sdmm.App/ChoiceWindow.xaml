@@ -1,0 +1,27 @@
+<Window x:Class="Sdmm.App.ChoiceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        Width="580" SizeToContent="Height" ResizeMode="NoResize"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <StackPanel Margin="18,14,18,16">
+        <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,12" />
+        <ItemsControl x:Name="Options">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- A large two-line choice button, as in Add a server -->
+                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,10" Padding="16,12"
+                            Click="OnPick" Tag="{Binding Index}" AutomationProperties.Name="{Binding Title}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{StaticResource SubtleTextBrush}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="Cancel" IsCancel="True" HorizontalAlignment="Right" Margin="0" />
+    </StackPanel>
+</Window>

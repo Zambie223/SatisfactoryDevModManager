@@ -1,0 +1,10 @@
+{
+  // Shared editor settings for this repo. Machine-specific setup (which .NET SDK to use) comes from
+  // tools/open-vscode.ps1, which launches VS Code with the .NET 10 SDK first on PATH.
+  "dotnet.defaultSolution": "SatisfactoryDevModManager.slnx",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    ".cache": true
+  }
+}
