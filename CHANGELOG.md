@@ -2,7 +2,7 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
-## Unreleased
+## 0.3.0 (2026-11-09)
 
 ### Added
 - **Command line tool:** `SatisfactoryDevModManager-cli.exe` lists your games, servers and dev mods, installs, updates and removes dev builds, updates everything with a newer build, matches a game with a server, and applies modpacks, using the app's settings. Confirmations can be answered with `--yes` for scripts, and exit codes report what happened. See the README's "Command line" section.
