@@ -44,6 +44,17 @@ public sealed partial class InstallItem : ObservableObject
         InstallKind.Sftp => $"sftp://{Config.User}@{Config.Host}:{Config.Port ?? 22}{Config.Path}",
         _ => $"{(Config.UseFtps ? "ftps" : "ftp")}://{Config.User}@{Config.Host}:{Config.Port ?? 21}{Config.Path}",
     };
+    /// <summary>
+    /// The address without the login name, for places that end up in screenshots (the server banner). The full form,
+    /// with the user, is in <see cref="Location"/> for Settings.
+    /// </summary>
+    public string DisplayLocation => Config.Kind switch
+    {
+        InstallKind.Local => Config.Path,
+        InstallKind.Sftp => $"sftp://{Config.Host}{(Config.Port is { } p and not 22 ? $":{p}" : "")}{Config.Path}",
+        _ => $"{(Config.UseFtps ? "ftps" : "ftp")}://{Config.Host}{(Config.Port is { } p and not 21 ? $":{p}" : "")}{Config.Path}",
+    };
+
     public string Kind => Config.Kind switch
     {
         InstallKind.Local => IsServer ? "Server on this PC" : "Game",
@@ -172,11 +183,14 @@ public sealed partial class ModRow : ObservableObject
         // Default source: GitHub for mods in your GitHub sources (dev builds), SMR for everything else, and SMR for a
         // mod that was installed from SMR, when SMR installs are available.
         _useSmrSource = Brand.Current.IsVariant && (IsFromSmr || builds.Count == 0);
-        // Default selection: the installed build if it is listed, otherwise the newest.
-        // A marker without a repo means the build came from an imported zip.
-        _selectedBuild = builds.FirstOrDefault(b => installed?.Marker is { } m && b.Build.Tag == m.SourceTag &&
-                                                    (m.SourceRepo is null ? b.Build.IsImported : b.Build.RepoFullName == m.SourceRepo))
-                         ?? builds.FirstOrDefault(b => b.Build.Version is not null);
+        // Default selection: the newest build when it's newer than what's installed, so updating is one click; otherwise
+        // the installed build if it's listed (a marker without a repo means an imported zip), else the newest.
+        var newest = builds.FirstOrDefault(b => b.Build.Version is not null);
+        var current = builds.FirstOrDefault(b => installed?.Marker is { } m && b.Build.Tag == m.SourceTag &&
+                                                 (m.SourceRepo is null ? b.Build.IsImported : b.Build.RepoFullName == m.SourceRepo));
+        _selectedBuild = newest?.Build.Version is { } latest && installed?.Descriptor?.EffectiveVersion is { } have && latest > have
+            ? newest
+            : current ?? newest;
     }
 
     /// <summary>"owner/repo" of the newest GitHub build (or of the installed one), else "" for mods only known from imported zips.</summary>

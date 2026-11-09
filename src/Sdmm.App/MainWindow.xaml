@@ -31,7 +31,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- What the mod list manages: this PC's game, or the server directly -->
-                    <UniformGrid Columns="2" Margin="0,10,0,0" IsEnabled="{Binding IsIdle}">
+                    <UniformGrid Columns="2" Margin="0,10,0,0" IsEnabled="{Binding CanSwitchInstall}">
                         <RadioButton Style="{StaticResource TabButton}" GroupName="Mode" IsChecked="{Binding IsClientMode}" AutomationProperties.Name="My game"
                                      ToolTip="Install and update mods in this PC's game">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -49,10 +49,10 @@
                     </UniformGrid>
                     <TextBlock Style="{StaticResource SectionHeader}" Text="{Binding InstallPickerHeader}" Margin="2,12,0,8" />
                     <ComboBox ItemsSource="{Binding LocalInstalls}" SelectedItem="{Binding SelectedLocal}" DisplayMemberPath="Name"
-                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding IsIdle}"
+                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding CanSwitchInstall}"
                               Visibility="{Binding IsClientMode, Converter={StaticResource BoolToVis}}" />
                     <ComboBox ItemsSource="{Binding ServerInstalls}" SelectedItem="{Binding SelectedServer}" DisplayMemberPath="Name"
-                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding IsIdle}"
+                              IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding CanSwitchInstall}"
                               Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}" />
                     <TextBlock Text="{Binding SelectedInstall.Status}" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="2,6,0,0" TextWrapping="Wrap" />
                     <Button Style="{StaticResource SidebarButton}" Content="Open Mods folder" Tag="&#xE8DA;" Command="{Binding OpenModsFolderCommand}" Margin="0,8,0,0"

@@ -67,18 +67,32 @@ public sealed partial class MainViewModel : ObservableObject
     public string TargetBannerText => !IsServerMode ? ""
         : SelectedInstall is { } s
             ? s.IsRemote
-                ? $"Managing the server '{s.Name}' ({s.Location}). Installs and removals happen on the server. Stop it in your host's panel first (hosts lock the files while it runs) and start it again afterwards."
-                : $"Managing the server '{s.Name}' ({s.Location}). Installs and removals happen on the server; restart it afterwards."
+                ? $"Managing the server '{s.Name}' ({s.DisplayLocation}). Installs and removals happen on the server. Stop it in your host's panel first (hosts lock the files while it runs) and start it again afterwards."
+                : $"Managing the server '{s.Name}' ({s.DisplayLocation}). Installs and removals happen on the server; restart it afterwards."
             : "Managing a server: add one or pick one in the sidebar.";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(IsIdle), nameof(CanSwitchInstall))]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand), nameof(InstallCommand), nameof(RemoveCommand), nameof(SyncFromServerCommand), nameof(ApplySyncCommand), nameof(InstallFromZipCommand), nameof(TakeOverCommand), nameof(TakeOverAllCommand), nameof(RemoveFromSmmProfilesCommand),
         nameof(UpdateAllCommand), nameof(HandBackCommand), nameof(HandBackAllCommand), nameof(InstallDependenciesCommand))]
     private bool _isBusy;
 
     /// <summary>Bound to the install pickers so the selection can't change mid-operation.</summary>
     public bool IsIdle => !IsBusy;
+
+    /// <summary>The running operation only reads (a server's or game's mods, or GitHub): switching installs is fine.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSwitchInstall))]
+    private bool _isReadOnlyBusy;
+
+    /// <summary>
+    /// The mode switch and the game and server pickers stay usable while SDMM is only reading, so a slow server can't
+    /// hold them hostage; switching cancels that read. They're locked while something is being changed.
+    /// </summary>
+    public bool CanSwitchInstall => !IsBusy || IsReadOnlyBusy;
+
+    /// <summary>Cancels the read in progress (closing its connection), when the user picks another install meanwhile.</summary>
+    private CancellationTokenSource? _readCts;
 
     /// <summary>The install the current mod rows were built for. Install/Remove refuse if it differs from the selection.</summary>
     private InstallItem? _rowsFor;
@@ -411,9 +425,11 @@ public sealed partial class MainViewModel : ObservableObject
                 Log($"{item.Name}: saved server fingerprint {fingerprint}");
             });
 
-    private async Task RunBusy(string status, Func<Task> work)
+    /// <param name="readOnly">Only reads (lists mods, checks GitHub): the install pickers stay usable meanwhile.</param>
+    private async Task RunBusy(string status, Func<Task> work, bool readOnly = false)
     {
         IsBusy = true;
+        IsReadOnlyBusy = readOnly;
         Status = status;
         try
         {
@@ -439,6 +455,12 @@ public sealed partial class MainViewModel : ObservableObject
                 }
             }
         }
+        catch (OperationCanceledException) when (_selectionChangedWhileBusy)
+        {
+            // Another game or server was picked while this one was being read; it's read next (below).
+            Status = "Ready";
+            Log("Stopped reading to switch to the newly picked install.");
+        }
         catch (Exception ex)
         {
             Status = "Failed: " + ex.Message;
@@ -450,6 +472,7 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            IsReadOnlyBusy = false;
         }
         // Settings changed during the operation: check GitHub again once (no loop, the flags are cleared first).
         if (_refreshWhenIdle)
@@ -522,7 +545,11 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnSelectedInstallChanged(InstallItem? value)
     {
         ServerLockText = "";
-        if (IsBusy) _selectionChangedWhileBusy = true;
+        if (IsBusy)
+        {
+            _selectionChangedWhileBusy = true;
+            if (IsReadOnlyBusy) _readCts?.Cancel(); // only reading: stop now rather than wait for a slow server
+        }
         else _ = RebuildRowsAsync();
     }
 
@@ -598,7 +625,7 @@ public sealed partial class MainViewModel : ObservableObject
     private bool CanRefresh() => !IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanRefresh))]
-    private Task RefreshAsync() => RunBusy("Checking GitHub…", async () =>
+    private Task RefreshAsync() => RunBusy("Checking GitHub…", readOnly: true, work: async () =>
     {
         var sources = _config.Sources;
         if (sources.Users.Count + sources.Orgs.Count + sources.Repos.Count == 0)
@@ -687,7 +714,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task RebuildRowsAsync(bool reuseScan = false)
     {
         if (IsBusy) return;
-        await RunBusy(reuseScan ? "Updating the list…" : SelectedInstall is { IsServer: true } ? "Reading the server…" : "Reading install…", async () =>
+        await RunBusy(reuseScan ? "Updating the list…" : SelectedInstall is { IsServer: true } ? "Reading the server…" : "Reading install…", readOnly: true, work: async () =>
         {
             await BuildRowsAsync(reuseScan);
             // Rows for an install picked after the last GitHub check (or the first one, added on first launch)
@@ -712,14 +739,24 @@ public sealed partial class MainViewModel : ObservableObject
 
         InstallRead read;
         bool fresh = !(reuseScan && _scan is { } cached && cached.Item == item);
+        using var readCts = new CancellationTokenSource();
+        _readCts = readCts;
         try
         {
-            read = fresh ? await Task.Run(() => ReadInstall(item)) : _scan!.Value.Read;
+            read = fresh ? await Task.Run(() => ReadInstall(item, readCts.Token)) : _scan!.Value.Read;
+        }
+        catch (Exception) when (readCts.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(readCts.Token);
         }
         catch (InvalidOperationException) when (item.IsRemote)
         {
             if (!await TryFixServerFolderAsync(item)) throw;
-            read = await Task.Run(() => ReadInstall(item));
+            read = await Task.Run(() => ReadInstall(item, readCts.Token));
+        }
+        finally
+        {
+            if (_readCts == readCts) _readCts = null;
         }
         // A hosted server whose Mods folder is locked is almost certainly running: say so now, not only in the banner.
         // Only once per server per session for reading (checking for builds re-reads it); changes always ask.
@@ -853,9 +890,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// Reads an install's platform and mods, checks the installed mods for problems (ModHealth), and for a hosted
     /// server checks the Mods folder can be changed.
     /// </summary>
-    private InstallRead ReadInstall(InstallItem item)
+    /// <param name="ct">Cancels by closing the connection, so even a slow SFTP/FTP listing stops at once.</param>
+    private InstallRead ReadInstall(InstallItem item, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         using var opened = Open(item);
+        using var stop = ct.Register(() =>
+        {
+            try { opened.Dispose(); }
+            catch (Exception) { } // closing mid-operation; the read throws and is treated as cancelled
+        });
         var info = opened.Install.Detect();
         var fs = opened.Install.FileSystem;
         var mods = ModScanner.Scan(fs);
@@ -1439,7 +1483,7 @@ public sealed partial class MainViewModel : ObservableObject
         var freed = await Task.Run(() => cache.Prune(KeepBuildsPerAsset));
         if (freed > 0) Log($"Download cache: removed older builds ({freed / 1048576.0:0.0} MB freed; they can be downloaded again).");
         UpdateCacheSize();
-        if (item.IsServer && result.Installed.Count > 0)
+        if (item.IsServer && result.Installed.Count > 0 && !_quietInstallResults)
             _dialogs.Info("Restart the server", item.IsRemote
                 ? "Installed on the server. Start (or restart) it from your host's panel so it loads the new version."
                 : "Installed on the server. Restart it so it loads the new version.");
@@ -1528,9 +1572,16 @@ public sealed partial class MainViewModel : ObservableObject
             direction == SyncDirection.GameMatchesServer ? localTarget : serverTarget, direction);
         bool variant = Brand.Current.IsVariant;
         SyncLines.Clear();
-        // Matching mods are only listed when they're dev builds; matching SMM mods would just be noise.
-        var changed = direction == SyncDirection.GameMatchesServer ? serverMods : localMods;
-        foreach (var i in items.Where(i => i.Status != SyncStatus.InSync || changed.Any(m => m.ModReference.Equals(i.ModReference, StringComparison.OrdinalIgnoreCase) && m.Owner == ModOwner.Sdmm)))
+        // Every mod on either side is listed (SMM's and hand-installed ones too): what will change first, then what needs
+        // fixing by hand, then one-sided mods, then the ones already in sync.
+        static int Order(SyncStatus s) => s switch
+        {
+            SyncStatus.Install or SyncStatus.FromSmr or SyncStatus.Remove => 0,
+            SyncStatus.BuildNotFound or SyncStatus.ManagedElsewhere => 1,
+            SyncStatus.ServerOnly or SyncStatus.ClientOnly => 2,
+            _ => 3,
+        };
+        foreach (var i in items.OrderBy(i => Order(i.Status)).ThenBy(i => i.ModReference, StringComparer.OrdinalIgnoreCase))
             SyncLines.Add(new SyncLine(i, variant));
         _syncFor = (server, local, direction);
 
@@ -1582,22 +1633,60 @@ public sealed partial class MainViewModel : ObservableObject
         if (target.IsServer) text += "\n\n" + ServerNote(target);
         if (!_dialogs.Confirm("Match", text)) return;
 
-        if (installs.Count > 0 && !await InstallBuildsAsync(target, installs)) return;
-        if (fromSmr.Count > 0)
-            await InstallFromSmrCoreAsync(fromSmr.Select(i => new Sdmm.Core.Smr.SmrRequest(i.ModReference,
-                Sdmm.Core.Versioning.SemVersion.TryParse(i.SmrVersion, out var v) ? v : null)).ToList(), target, askFirst: false);
-        if (removes.Count > 0)
-            await Task.Run(() =>
+        // The parts run one after another; each part's own "done" message is held back so there's one result at the end.
+        var steps = new List<string>();
+        if (installs.Count > 0) steps.Add($"installing {installs.Count} dev build{(installs.Count == 1 ? "" : "s")}");
+        if (fromSmr.Count > 0) steps.Add($"installing {fromSmr.Count} mod{(fromSmr.Count == 1 ? "" : "s")} from SMR");
+        if (removes.Count > 0) steps.Add($"removing {removes.Count} mod{(removes.Count == 1 ? "" : "s")}");
+        int step = 0;
+        void Next() => SyncStepText = $"Step {++step} of {steps.Count}: {steps[step - 1]}";
+        _quietInstallResults = true;
+        try
+        {
+            if (installs.Count > 0)
             {
-                using var opened = Open(target);
-                if (!EnsureServerWritable(target, opened.Install)) return;
-                var installer = new Installer(Log);
-                foreach (var r in removes) { installer.Uninstall(opened.Install, r); MarkChanged([r]); }
-            });
-        // Show the result: a successful match leaves only in-sync, one-sided and hand-fix lines.
-        await CompareWithServerAsync();
-        await RefreshAfterChangeAsync(target);
+                Next();
+                if (!await InstallBuildsAsync(target, installs)) return;
+            }
+            if (fromSmr.Count > 0)
+            {
+                Next();
+                await InstallFromSmrCoreAsync(fromSmr.Select(i => new Sdmm.Core.Smr.SmrRequest(i.ModReference,
+                    Sdmm.Core.Versioning.SemVersion.TryParse(i.SmrVersion, out var v) ? v : null)).ToList(), target, askFirst: false);
+            }
+            if (removes.Count > 0)
+            {
+                Next();
+                await Task.Run(() =>
+                {
+                    using var opened = Open(target);
+                    if (!EnsureServerWritable(target, opened.Install)) return;
+                    var installer = new Installer(Log);
+                    foreach (var r in removes) { installer.Uninstall(opened.Install, r); MarkChanged([r]); }
+                });
+            }
+            SyncStepText = "Checking the result…";
+            // Show the result: a successful match leaves only in-sync, one-sided and hand-fix lines.
+            await CompareWithServerAsync();
+            await RefreshAfterChangeAsync(target);
+        }
+        finally
+        {
+            _quietInstallResults = false;
+            SyncStepText = "";
+        }
+        var left = SyncLines.Count(l => l.IsActionable);
+        _dialogs.Info("Match finished",
+            $"Finished changing {(target.IsServer ? "the server" : "your game")} '{target.Name}' to match '{other.Name}'.\n\n" +
+            (left == 0 ? "Everything that could be matched now matches." : $"{left} line{(left == 1 ? " still differs" : "s still differ")}; see the list.") +
+            (target.IsServer ? "\n\n" + (target.IsRemote ? "Start (or restart) the server from your host's panel so it loads the changes." : "Restart the server so it loads the changes.") : ""));
     });
+
+    /// <summary>The step a multi-part operation (Match) is on, shown in the sync window; empty otherwise.</summary>
+    [ObservableProperty] private string _syncStepText = "";
+
+    /// <summary>Set during a multi-part operation, so a part's own "installed, restart the server" message waits for the end.</summary>
+    private bool _quietInstallResults;
 
     /// <summary>
     /// For a removal: the installed mods (that aren't being removed too) that require one of <paramref name="removing"/>,
@@ -2215,14 +2304,26 @@ public sealed partial class MainViewModel : ObservableObject
 
         using var opened = await Task.Run(() => Open(item));
         _smm = SmmState.Load(_config.SmmDirectory);
-        if (installRequests.Count > 0 && !await InstallRequestsAsync(item, opened, installRequests, cache, takeOver.Count == 0 ? installed : null, virusTotalChecked: true)) return;
-        if (remove.Count > 0)
-            await Task.Run(() =>
-            {
-                var installer = new Installer(Log);
-                foreach (var r in remove) { installer.Uninstall(opened.Install, r); MarkChanged([r]); }
-            });
+        // Installs, then removals: the install part's own "restart the server" message waits until both are done.
+        _quietInstallResults = true;
+        try
+        {
+            if (installRequests.Count > 0 && !await InstallRequestsAsync(item, opened, installRequests, cache, takeOver.Count == 0 ? installed : null, virusTotalChecked: true)) return;
+            if (remove.Count > 0)
+                await Task.Run(() =>
+                {
+                    var installer = new Installer(Log);
+                    foreach (var r in remove) { installer.Uninstall(opened.Install, r); MarkChanged([r]); }
+                });
+        }
+        finally
+        {
+            _quietInstallResults = false;
+        }
         Log($"Applied modpack '{pack.Name}' to {item.Name}: {installRequests.Count} installed or changed, {remove.Count} removed, {skipped.Count} skipped.");
+        if (item.IsServer && installRequests.Count + remove.Count > 0)
+            _dialogs.Info("Modpack applied", $"Applied '{pack.Name}' to the server '{item.Name}'.\n\n" +
+                (item.IsRemote ? "Start (or restart) it from your host's panel so it loads the changes." : "Restart it so it loads the changes."));
         await RefreshAfterChangeAsync(item);
         await LoadSmrAsync(refreshAll: false);
     }

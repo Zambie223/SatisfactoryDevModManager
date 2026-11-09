@@ -45,8 +45,13 @@
                    Visibility="{Binding SyncSummary, Converter={StaticResource EmptyToCollapsed}}" />
         <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Button DockPanel.Dock="Right" Content="Close" IsCancel="True" Click="OnClose" Margin="0" />
-            <ProgressBar IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
-                         Width="120" HorizontalAlignment="Left" />
+            <ProgressBar DockPanel.Dock="Left" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                         Width="120" VerticalAlignment="Center" />
+            <!-- What Match is doing: the step, then the detail (download, install...) -->
+            <TextBlock VerticalAlignment="Center" Margin="12,0,12,0" TextTrimming="CharacterEllipsis" Foreground="{StaticResource SubtleTextBrush}"
+                       Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                <Run Text="{Binding SyncStepText, Mode=OneWay}" Foreground="{StaticResource TextBrush}" /> <Run Text="{Binding Status, Mode=OneWay}" />
+            </TextBlock>
         </DockPanel>
         <DataGrid ItemsSource="{Binding SyncLines}" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="NaN"
                   AutoGenerateColumns="False">

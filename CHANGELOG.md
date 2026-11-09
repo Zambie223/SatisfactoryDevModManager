@@ -2,6 +2,15 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## Unreleased
+
+### Fixed
+- When a newer build of an installed mod is available, it's now selected in the version list, so the button says "Update to …" straight away instead of needing a different version picked first.
+- The My game / Server switch and the game and server lists stay usable while SDMM is reading a server or checking for new builds. Picking another one stops the read in progress, so a slow server no longer locks you out until it finishes.
+- **Sync with server** now lists every mod on either side, including ones installed by SMM, the host or by hand and ones already in sync, with what will change at the top.
+- **Match** showed its "installed, restart the server" message after the first part finished while the rest was still running. It now shows the step it's on and one message when everything is done. Applying a modpack to a server works the same way.
+- The server banner no longer shows the login name in the server's address, so screenshots don't share it.
+
 ## 0.2.2 (2026-11-08)
 
 ### Fixed
