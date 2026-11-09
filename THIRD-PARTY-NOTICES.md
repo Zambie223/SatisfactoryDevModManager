@@ -1,6 +1,6 @@
 # Third-party notices
 
-The SDMM exe bundles the components below. Each is used under the MIT License, whose text follows the list.
+The SDMM exes (`SatisfactoryDevModManager.exe` and `SatisfactoryDevModManager-cli.exe`) bundle the components below; the command line tool leaves out WPF and CommunityToolkit.Mvvm. Each is used under the MIT License, whose text follows the list.
 
 | Component | Version | Copyright | Project |
 |---|---|---|---|

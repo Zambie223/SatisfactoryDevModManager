@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Command-line companion to the GUI: same settings, cache and logs, dev mods only. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Windows only: saved tokens and passwords are decrypted with DPAPI, as in the app. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Sdmm.Cli</RootNamespace>
+    <AssemblyName>SatisfactoryDevModManager-cli</AssemblyName>
+    <ApplicationIcon>..\Sdmm.App\Assets\sdmm.ico</ApplicationIcon>
+    <!-- Single self-contained exe for publish (see build.ps1 -Publish). -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sdmm.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sdmm.Core\Sdmm.Core.csproj" />
+    <ProjectReference Include="..\Sdmm.Remote\Sdmm.Remote.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -148,6 +148,28 @@ Under **Settings → Security**, SDMM can check each mod file with [VirusTotal](
 - New dev builds usually aren't known to VirusTotal yet. To have those scanned too, turn on **Upload files VirusTotal hasn't seen yet**. That sends the whole file to VirusTotal, where its paying customers can download it, so leave it off for builds that aren't public. A first scan takes a minute or two.
 - Each file is checked once. If VirusTotal can't be reached or the free key's limit (4 checks a minute, 500 a day) is used up, installing carries on and the log says what wasn't checked.
 
+## Command line (optional)
+
+`SatisfactoryDevModManager-cli.exe`, on the same release page, does the everyday dev-mod jobs from a command prompt or a script, for example updating a server's dev builds on a schedule. It uses the same settings, download cache and logs as the app, so set up your games, servers, sources and token in the app first. It manages dev builds from your sources and imported zips only.
+
+```
+SatisfactoryDevModManager-cli installs                      list your games and servers
+SatisfactoryDevModManager-cli mods --on "IB Server"         dev mods there: installed, newest, status
+SatisfactoryDevModManager-cli install AutoTrains            install or update a mod (newest build)
+SatisfactoryDevModManager-cli install AutoTrains v1.4.14    a specific build
+SatisfactoryDevModManager-cli remove AutoTrains
+SatisfactoryDevModManager-cli update --on "IB Server" --yes update every dev build that has a newer one
+SatisfactoryDevModManager-cli match --game "Steam (C:)" --server "IB Server" --change server
+SatisfactoryDevModManager-cli modpack "Coop" --on "IB Server"
+```
+
+- `--on` picks a game or server by its name in the app (or its number from `installs`). Without it, the game you last picked in the app is used.
+- Changes are listed and confirmed before they're made. `--yes` answers yes for you; without a console to ask on (in a script), the answer is no unless `--yes` is given.
+- `--yes` doesn't trust a server key seen for the first time (add `--accept-new-host-key` after comparing it with your host's) or install a file VirusTotal flags (add `--allow-flagged`). VirusTotal checks run if you've turned them on in the app.
+- The same safety checks apply as in the app: the game must be closed, mods SMM or someone else installed are left alone, and a hosted server that's running is detected.
+- Exit codes: 0 done, 1 error, 2 bad arguments, 3 stopped (declined or refused), 4 the server's files are locked (stop the server, then try again).
+- `--help` lists everything. The command line tool doesn't update itself; download the new one from the release page when you update the app.
+
 ## Where SDMM keeps its files
 
 SDMM is a single portable exe with no installer, and it doesn't need .NET installed. Its settings (`sdmm.config.json`), the download cache and imported zips live in `%LOCALAPPDATA%\SatisfactoryDevModManager`, so moving or re-downloading the exe keeps them. The cache keeps the newest 2 builds of each mod file and can be cleared under **Settings → Storage**. To put the cache on another drive, set `cacheDirectory` in the settings file. To use a different settings file, start SDMM with `--config <path>`.
@@ -166,7 +188,7 @@ Report bugs and other problems on this repository's [Issues](../../issues) page.
 - which SDMM version you're on (**Settings → Updates**),
 - whether it happened on your game or a server, and for a server, which host and whether it's SFTP or FTP,
 - what you did, what you expected, and what happened instead,
-- the relevant lines from the activity log (open it from the status bar under the mod list), or `crash.log` if SDMM showed an unexpected error. For a problem you can repeat, turn on the detailed log under **Settings → Storage**, repeat it, and attach `sdmm.log` (see [Where SDMM keeps its files](#where-sdmm-keeps-its-files)).
+- the relevant lines from the activity log (open it from the status bar under the mod list) or the command line tool's output, or `crash.log` if SDMM showed an unexpected error. For a problem you can repeat, turn on the detailed log under **Settings → Storage**, repeat it, and attach `sdmm.log` (see [Where SDMM keeps its files](#where-sdmm-keeps-its-files)).
 
 Before posting, remove anything personal from what you paste, such as your Windows user name in folder paths, server addresses and user names. Never post a token or password.
 

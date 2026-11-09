@@ -4,6 +4,9 @@ Changes since the first public release of Satisfactory Dev Mod Manager. The firs
 
 ## Unreleased
 
+### Added
+- **Command line tool:** `SatisfactoryDevModManager-cli.exe` lists your games, servers and dev mods, installs, updates and removes dev builds, updates everything with a newer build, matches a game with a server, and applies modpacks, using the app's settings. Confirmations can be answered with `--yes` for scripts, and exit codes report what happened. See the README's "Command line" section.
+
 ### Fixed
 - When a newer build of an installed mod is available, it's now selected in the version list, so the button says "Update to …" straight away instead of needing a different version picked first.
 - The My game / Server switch and the game and server lists stay usable while SDMM is reading a server or checking for new builds. Picking another one stops the read in progress, so a slow server no longer locks you out until it finishes.

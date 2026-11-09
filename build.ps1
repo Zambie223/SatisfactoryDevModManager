@@ -27,6 +27,10 @@ if ($Publish) {
         dotnet publish $app -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true `
             -p:EnableCompressionInSingleFile=true -o artifacts\publish
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # The command-line companion, published next to it as SatisfactoryDevModManager-cli.exe.
+        dotnet publish src\Sdmm.Cli\Sdmm.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true -o artifacts\publish
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     } else {
         Write-Warning 'GUI project does not exist yet; nothing to publish.'
     }

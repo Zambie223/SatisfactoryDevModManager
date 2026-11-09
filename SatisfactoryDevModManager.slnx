@@ -3,6 +3,7 @@
     <Project Path="src/Sdmm.Core/Sdmm.Core.csproj" />
     <Project Path="src/Sdmm.Remote/Sdmm.Remote.csproj" />
     <Project Path="src/Sdmm.App/Sdmm.App.csproj" />
+    <Project Path="src/Sdmm.Cli/Sdmm.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Sdmm.Core.Tests/Sdmm.Core.Tests.csproj" />
