@@ -2,7 +2,7 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
-## Unreleased
+## 0.4.1 (2026-11-10)
 
 ### Added
 - **Settings → Security → Show server login names in log files** (off by default).
