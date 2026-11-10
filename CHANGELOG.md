@@ -2,6 +2,24 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## 0.4.0 (2026-11-10)
+
+### Added
+- **Filters and sorting:** the filter list next to the search box is now a **Filters** menu. Combine where a mod is available from (GitHub, imported zip), who installed it here (SDMM, SMM, the host or by hand), installed or not, and "updates available" or "has problems", and sort by name, needs attention first, installed first or newest release. The old filters are one-click quick filters in the same menu, and the filters in effect show under the search box, each with an × to remove it.
+- **Where each mod comes from:** every row in the list now says what it can be installed from and who installed the copy here, for example "Available: GitHub · Installed by SMM".
+- **Active modpack:** each game or server can follow a modpack, picked under the game or server list, like SMM's profiles. Installs, updates and removals made in SDMM (and the command line tool) update it. When the game or server differs from it because of changes made elsewhere, a banner says what's different and offers **Update the modpack** or **Apply the modpack**. Applying a saved modpack makes it the one that game or server follows.
+- **Duplicate** in the Modpacks window makes a separate copy of a modpack.
+- The app's update also updates `SatisfactoryDevModManager-cli.exe` when it's next to the app. It's never downloaded otherwise.
+
+### Changed
+- In the Modpacks window, "Goes on" is now **Install on** (Games and servers / Players' games only / Servers only). A side worked out from the mod's files is marked "auto"; one you picked shows a button to go back to automatic.
+- Renaming a modpack takes effect with Enter or the new **Rename** button, without closing the window. A name another modpack already has gets a number added.
+- The option to remove other mods when applying a modpack now says what it does: "Also remove mods that aren't in this modpack (only ones SDMM installed)".
+- The list is sorted by the name it shows.
+
+### Fixed
+- Searching didn't find mods by the name shown in the list when that differs from the mod reference (the name from SMR). It now also searches that name and the authors.
+
 ## 0.3.0 (2026-11-09)
 
 ### Added
