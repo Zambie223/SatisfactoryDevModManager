@@ -33,6 +33,7 @@ public static class ModScanner
     /// </summary>
     public static IReadOnlyList<InstalledMod> Scan(IInstallFileSystem fs)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var result = new List<InstalledMod>();
         foreach (var (root, inGf) in new[] { (InstallPaths.ModsDir, false), (InstallPaths.GameFeaturesDir, true) })
         {
@@ -43,6 +44,10 @@ public static class ModScanner
                 result.Add(Inspect(fs, InstallPaths.Combine(root, dir), dir, inGf));
             }
         }
+        // Reads aren't logged one by one; this line shows the cost of a full scan (over SFTP/FTP, round trips for every mod).
+        if (Diagnostics.FileLog.Enabled)
+            Diagnostics.FileLog.Write("scan", $"{fs.DisplayRoot}: read {result.Count} mod folders in " +
+                $"{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0.0} s");
         return result;
     }
 

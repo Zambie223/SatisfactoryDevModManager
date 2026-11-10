@@ -79,8 +79,23 @@ public sealed class SftpInstallFileSystem : IInstallFileSystem, IDisposable
     public bool FileExists(string path) => TryAttrs(P(path), out var dir) && !dir;
     public bool DirectoryExists(string path) => TryAttrs(P(path), out var dir) && dir;
 
-    private IEnumerable<Renci.SshNet.Sftp.ISftpFile> List(string full) =>
-        TryAttrs(full, out var dir) && dir ? C.ListDirectory(full).Where(e => e.Name is not "." and not "..") : [];
+    /// <summary>Lists a folder; empty if it doesn't exist or isn't a folder.</summary>
+    /// <remarks>Lists first and checks the path only on failure: a check before every listing is an extra round trip per mod in a scan.</remarks>
+    private List<Renci.SshNet.Sftp.ISftpFile> List(string full)
+    {
+        try
+        {
+            return C.ListDirectory(full).Where(e => e.Name is not "." and not "..").ToList();
+        }
+        catch (SftpPathNotFoundException)
+        {
+            return [];
+        }
+        catch (SshException) when (!(TryAttrs(full, out var dir) && dir))
+        {
+            return [];
+        }
+    }
 
     public IReadOnlyList<string> ListDirectories(string path) => List(P(path)).Where(e => e.IsDirectory).Select(e => e.Name).ToList();
     public IReadOnlyList<string> ListFiles(string path) => List(P(path)).Where(e => e.IsRegularFile).Select(e => e.Name).ToList();
