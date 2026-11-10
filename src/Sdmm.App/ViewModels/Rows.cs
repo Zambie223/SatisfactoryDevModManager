@@ -196,11 +196,21 @@ public sealed partial class ModRow : ObservableObject
     /// <summary>"owner/repo" of the newest GitHub build (or of the installed one), else "" for mods only known from imported zips.</summary>
     public string Source => Discovered?.Builds.FirstOrDefault(b => !b.IsImported)?.RepoFullName ?? Installed?.Marker?.SourceRepo ?? "";
 
+    /// <summary>
+    /// SDMM manages it because it was taken over or installed from SMR (not a dev build). Outside the branding variant such
+    /// mods are labelled plainly as SDMM's, without where they came from.
+    /// </summary>
+    public bool HasVariantOrigin => Installed is { Owner: ModOwner.Sdmm, Marker: { } m } && (m.IsAdoptedCopy || IsFromSmr);
+
+    private static bool Variant => Brand.Current.IsVariant;
+
     public string InstalledText => Installed switch
     {
         null => "—",
-        { Owner: ModOwner.Sdmm, Marker: { IsAdoptedCopy: true, AdoptedFrom: { } from } } m =>
+        { Owner: ModOwner.Sdmm, Marker: { IsAdoptedCopy: true, AdoptedFrom: { } from } } m when Variant =>
             $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (taken over from {(from == SdmmMarker.AdoptedFromSmm ? "SMM" : OnServer ? "the host or a hand copy" : "a hand copy")})",
+        { Owner: ModOwner.Sdmm } m when Variant && IsFromSmr => $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (SMR)",
+        { Owner: ModOwner.Sdmm } m when HasVariantOrigin => $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (SDMM)",
         { Owner: ModOwner.Sdmm } m => $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (dev{(m.Marker?.SourceTag is { } t ? ", " + t : "")})",
         { Owner: ModOwner.Smm } m => $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (SMM)",
         var m => $"{m.Descriptor?.EffectiveVersion.ToString() ?? "?"}  (manual)",
@@ -219,7 +229,8 @@ public sealed partial class ModRow : ObservableObject
             if (Installed is { Owner: ModOwner.Smm }) return ModState.ManagedBySmm;
             if (Installed is { Owner: ModOwner.Unmanaged }) return ModState.Manual;
             if (Installed is null) return Latest is null ? ModState.NoBuilds : ModState.NotInstalled;
-            if (IsFromSmr) return SmrUpdateVersion is not null ? ModState.UpdateAvailable : ModState.Installed;
+            // SMR updates are only offered (and only possible) in the variant.
+            if (IsFromSmr) return Variant && SmrUpdateVersion is not null ? ModState.UpdateAvailable : ModState.Installed;
             var latest = Latest?.Build.Version;
             var iv = InstalledSemVer;
             if (latest is null || iv is null) return ModState.Installed;
@@ -258,7 +269,7 @@ public sealed partial class ModRow : ObservableObject
     public string OwnerBadge => Installed?.Owner switch
     {
         null => "",
-        ModOwner.Sdmm => IsFromSmr ? "SMR" : Installed.Marker?.IsAdoptedCopy == true ? "Taken over" : "SDMM dev",
+        ModOwner.Sdmm => !HasVariantOrigin ? "SDMM dev" : !Variant ? "SDMM" : IsFromSmr ? "SMR" : "Taken over",
         ModOwner.Smm => "SMM",
         _ => OnServer ? "Host / manual" : "Manual",
     };
@@ -273,7 +284,7 @@ public sealed partial class ModRow : ObservableObject
 
     public string OwnerBadgeTip => Installed?.Owner switch
     {
-        ModOwner.Sdmm => "Installed by SDMM (marked with .sdmm.json); SDMM can update or remove it.",
+        ModOwner.Sdmm => "Managed by SDMM (marked with .sdmm.json); SDMM can update or remove it.",
         ModOwner.Smm => "Installed by SMM (marked with .smm); manage it in SMM.",
         null => "",
         _ => OnServer ? "Installed by your host's mod tool or by hand; SDMM leaves it alone." : "Installed by hand or by another tool; SDMM leaves it alone.",
@@ -347,7 +358,7 @@ public sealed partial class ModRow : ObservableObject
     public string LatestText => Latest is { } l ? l.Build.Tag + (l.Build.Prerelease ? " (prerelease)" : "") : "None";
 
     public string Owner => (IsFromSmr || Source.Length == 0) && Smr?.Authors.FirstOrDefault() is { } author ? author.Username
-        : IsFromSmr ? "SMR"
+        : IsFromSmr ? (Variant ? "SMR" : "")
         : Source.Contains('/') ? Source[..Source.IndexOf('/')]
         : Source.Length > 0 ? Source
         // No GitHub source: an imported zip (an SDMM marker without a repo, or only imported builds), else unknown.
@@ -361,7 +372,9 @@ public sealed partial class ModRow : ObservableObject
         Latest?.Build.RepoDescription ?? Discovered?.Builds.FirstOrDefault(b => b.RepoDescription is not null)?.RepoDescription
         ?? (Discovered is null
                 ? Installed?.Owner == ModOwner.Sdmm
-                    ? Installed.Marker?.IsAdoptedCopy == true ? "Taken over by SDMM; not in your GitHub sources." : "Installed by SDMM; no longer in your GitHub sources."
+                    ? HasVariantOrigin
+                        ? Variant && Installed.Marker?.IsAdoptedCopy == true ? "Taken over by SDMM; not in your GitHub sources." : "Managed by SDMM; not in your GitHub sources."
+                        : "Installed by SDMM; no longer in your GitHub sources."
                     : "Not in your GitHub sources."
             : Discovered.Builds.All(b => b.IsImported) ? "Added from a zip with Install from zip; not in your GitHub sources."
             : "No description.");

@@ -2730,6 +2730,15 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanHandBackAll))]
     private Task HandBackAllAsync() => RunBusy("Handing mods back…", () => HandBackRowsAsync(Mods.Where(HandBackPossible).ToList()));
 
+    /// <summary>Listed mods SDMM manages because of a takeover or an SMR install (asked about when leaving the variant).</summary>
+    public IReadOnlyList<ModRow> VariantManagedMods => Mods.Where(r => r.HasVariantOrigin).ToList();
+
+    /// <summary>Of the listed mods, those that can be handed back here.</summary>
+    public IReadOnlyList<ModRow> HandBackCandidates => Mods.Where(HandBackPossible).ToList();
+
+    /// <summary>The game or server the list shows, for messages.</summary>
+    public string? ListedInstallName => SelectedInstall?.Name;
+
     /// <summary>
     /// Hands mods back: the ones taken over from the host or a hand copy by removing SDMM's marker, then the rest to SMM.
     /// </summary>

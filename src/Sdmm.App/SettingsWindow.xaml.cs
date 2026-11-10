@@ -113,8 +113,11 @@ public partial class SettingsWindow : Window
         if (IsLoaded) _sequence.ForksToggled();
     }
 
-    /// <summary>Switching on says plainly what changes and only goes ahead when confirmed; switching off just does it.</summary>
-    private void OnSequenceCompleted()
+    /// <summary>
+    /// Switching on says plainly what changes and only goes ahead when confirmed. Switching off first points out mods
+    /// that only the variant can update or hand back, and offers to hand them back.
+    /// </summary>
+    private async void OnSequenceCompleted()
     {
         const string on = "Satisfactory Black Market", off = "Satisfactory Dev Mod Manager";
         if (!Brand.Current.IsVariant)
@@ -135,6 +138,25 @@ public partial class SettingsWindow : Window
                 return;
             _vm.ToggleVariant();
             return;
+        }
+        var managed = _vm.VariantManagedMods;
+        if (managed.Count > 0)
+        {
+            var back = _vm.HandBackCandidates.Where(r => managed.Contains(r)).ToList();
+            string Names(IEnumerable<ViewModels.ModRow> rows) => string.Join(", ", rows.Select(r => r.ModReference));
+            var options = new List<(string Title, string Detail)>();
+            if (back.Count > 0)
+                options.Add(("Hand them back first", $"Gives {Names(back)} back to SMM or the host, then switches. Each hand-back still asks first."));
+            options.Add(("Switch anyway", "They stay as they are. Come back here whenever you need to update or hand them back."));
+            var choice = new ChoiceWindow("Leaving the Black Market",
+                $"In '{_vm.ListedInstallName}', {managed.Count} mod{(managed.Count == 1 ? " is" : "s are")} managed by SDMM because of the Black Market: {Names(managed)}.\n\n" +
+                "Back in the Dev Mod Manager they keep working and can be removed, but only the Black Market can update them from SMR " +
+                "or hand them back to SMM or the host. SMM leaves them alone until they're handed back." +
+                (_vm.Installs.Count > 1 ? "\n\nOnly the game or server shown in the list was checked." : ""),
+                options) { Owner = this };
+            if (choice.ShowDialog() != true || choice.Choice is not { } picked) return; // Cancel: stay
+            if (back.Count > 0 && picked == 0 && _vm.HandBackAllCommand.CanExecute(null))
+                await _vm.HandBackAllCommand.ExecuteAsync(null);
         }
         _vm.ToggleVariant();
         MessageBox.Show(this, "Back to the Satisfactory Dev Mod Manager. Act natural.", off, MessageBoxButton.OK, MessageBoxImage.None);
