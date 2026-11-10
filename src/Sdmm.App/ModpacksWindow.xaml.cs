@@ -21,4 +21,19 @@ public partial class ModpacksWindow : Window
             vm.Save();
         };
     }
+
+    private void CommitName()
+    {
+        NameBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
+        NameBox.SelectAll();
+    }
+
+    private void OnNameKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        CommitName();
+        e.Handled = true;
+    }
+
+    private void OnRename(object sender, RoutedEventArgs e) => CommitName();
 }

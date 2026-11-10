@@ -23,8 +23,10 @@
                 <UniformGrid Columns="2">
                     <Button Style="{StaticResource GreyButton}" Content="Import…" Command="{Binding ImportCommand}" Margin="0,0,3,6" />
                     <Button Style="{StaticResource GreyButton}" Content="Export…" Command="{Binding ExportCommand}" Margin="3,0,0,6" />
+                    <Button Style="{StaticResource GreyButton}" Content="Duplicate" Command="{Binding DuplicateCommand}" Margin="0,0,3,6"
+                            ToolTip="Make a copy of the selected modpack to change separately" />
+                    <Button Style="{StaticResource GreyButton}" Content="Delete" Command="{Binding DeleteCommand}" Margin="3,0,0,6" />
                 </UniformGrid>
-                <Button Style="{StaticResource GreyButton}" Content="Delete" Command="{Binding DeleteCommand}" Margin="0,0,0,6" />
                 <!-- SMM profiles as modpacks -->
                 <StackPanel Visibility="{Binding IsVariant, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="From an SMM profile" Foreground="{StaticResource SubtleTextBrush}" Margin="0,6,0,4" />
@@ -54,12 +56,17 @@
             <DockPanel Visibility="{Binding Selected, Converter={StaticResource NullToCollapsed}}">
                 <StackPanel DockPanel.Dock="Top">
                     <TextBlock Text="Name" Foreground="{StaticResource SubtleTextBrush}" Margin="0,0,0,4" />
-                    <TextBox Text="{Binding Selected.Name, UpdateSourceTrigger=LostFocus}" FontSize="15" Margin="0,0,0,8" />
+                    <DockPanel Margin="0,0,0,8">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GreyButton}" Content="Rename" Margin="8,0,0,0" Padding="12,6"
+                                Click="OnRename" ToolTip="Save the new name (Enter does the same)" />
+                        <TextBox x:Name="NameBox" Text="{Binding Selected.Name, UpdateSourceTrigger=LostFocus}" FontSize="15" KeyDown="OnNameKeyDown"
+                                 AutomationProperties.Name="Modpack name" />
+                    </DockPanel>
                     <TextBlock Style="{StaticResource Hint}" Text="{Binding TargetText}" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
-                    <CheckBox Content="Remove SDMM-managed mods that aren't in the modpack" IsChecked="{Binding RemoveOthers}" Margin="0,0,0,4"
-                              ToolTip="Mods SMM, the host or a hand copy installed are never removed; they're only listed" />
+                    <CheckBox Content="Also remove mods that aren't in this modpack (only ones SDMM installed)" IsChecked="{Binding RemoveOthers}" Margin="0,0,0,4"
+                              ToolTip="Makes the game or server match the modpack exactly. Mods that SMM, the host or a hand copy installed are never removed; they're only listed." />
                     <CheckBox Content="Use the newest versions that fit, instead of the saved versions" IsChecked="{Binding UseNewest}" Margin="0,0,0,8" />
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Content="Close" IsCancel="True" Margin="8,0,0,0" />
@@ -85,19 +92,27 @@
                         <DataGridTextColumn Header="Mod" Binding="{Binding ModReference}" Width="*" IsReadOnly="True" />
                         <DataGridTextColumn Header="Version" Binding="{Binding VersionText}" Width="120" IsReadOnly="True" />
                         <DataGridTextColumn Header="From" Binding="{Binding SourceText}" Width="150" IsReadOnly="True" />
-                        <DataGridTemplateColumn Header="Goes on" Width="130">
+                        <DataGridTemplateColumn Header="Install on" Width="230">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <ComboBox ItemsSource="{Binding Source={x:Static vm:ModpackModRow.SideOptions}}" SelectedItem="{Binding SideText, UpdateSourceTrigger=PropertyChanged}"
-                                              Background="{StaticResource ControlOnPanelBrush}"
-                                              ToolTip="Both: games and servers. Players only / Server only: skipped on the other kind of install." />
+                                    <DockPanel ToolTip="{Binding SideTip}">
+                                        <!-- "auto" when worked out from the mod; a reset button once you've picked something else -->
+                                        <TextBlock DockPanel.Dock="Right" Text="auto" Foreground="{StaticResource SubtleTextBrush}" FontSize="11" FontStyle="Italic"
+                                                   VerticalAlignment="Center" Margin="6,0,2,0" Width="30"
+                                                   Visibility="{Binding IsAutoSide, Converter={StaticResource BoolToVis}}" />
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE777;" Margin="2,0,0,0"
+                                                Command="{Binding ResetSideCommand}" ToolTip="Back to automatic" AutomationProperties.Name="Back to automatic"
+                                                Visibility="{Binding IsSideOverridden, Converter={StaticResource BoolToVis}}" />
+                                        <ComboBox ItemsSource="{Binding Source={x:Static vm:ModpackModRow.SideOptions}}" SelectedItem="{Binding SideText, UpdateSourceTrigger=PropertyChanged}"
+                                                  Background="{StaticResource ControlOnPanelBrush}" />
+                                    </DockPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="" Width="44">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Remove from the modpack"
+                                    <Button Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Remove from the modpack" AutomationProperties.Name="Remove from the modpack"
                                             Command="{Binding DataContext.RemoveRowCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}" />
                                 </DataTemplate>

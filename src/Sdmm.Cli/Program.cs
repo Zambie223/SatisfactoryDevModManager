@@ -431,9 +431,25 @@ internal sealed class Cli(AppConfig cfg, string configPath, Args a)
         installer.CleanupStaging(opened.Install);
         var result = installer.Execute(plan, confirmed);
         Say($"Done: installed {result.Installed.Count}, already up to date {result.Skipped.Count}.");
+        FollowModpack(c, requests.Select(r => r.Package.ModReference).ToList(), []);
         cache.Prune(KeepBuildsPerAsset);
         if (restartNote && IsServer(c) && result.Installed.Count > 0) Say(RestartNote(c));
         return true;
+    }
+
+    /// <summary>
+    /// Like the app: the modpack this game or server follows (if any) takes in the mods this command installed or
+    /// removed, so the app doesn't report them as changes made elsewhere.
+    /// </summary>
+    private void FollowModpack(InstallConfig c, IReadOnlyCollection<string> changed, IReadOnlyCollection<string> removed)
+    {
+        if (changed.Count == 0 || c.ActiveModpack is not { } name ||
+            cfg.Modpacks.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is not { } pack)
+            return;
+        var (_, installed) = Read(c);
+        if (!ModpackIO.Follow(pack, installed, IsServer(c), ServerSync.SmrSourcePrefix, changed, removed, DateTimeOffset.UtcNow)) return;
+        cfg.Save(configPath);
+        Say($"Updated the modpack '{pack.Name}' that '{c.Name}' follows.");
     }
 
     private static string RestartNote(InstallConfig c) => c.IsRemote
@@ -553,6 +569,7 @@ internal sealed class Cli(AppConfig cfg, string configPath, Args a)
         EnsureWritable(c, opened);
         new Installer(line => Say("  " + line)).Uninstall(opened.Install, mod.ModReference);
         Say($"Removed {mod.ModReference}.");
+        FollowModpack(c, [mod.ModReference], [mod.ModReference]);
         if (IsServer(c)) Say(RestartNote(c));
         return Exit.Ok;
     }
@@ -617,6 +634,7 @@ internal sealed class Cli(AppConfig cfg, string configPath, Args a)
             EnsureWritable(target, opened);
             var installer = new Installer(line => Say("  " + line));
             foreach (var r in removes) installer.Uninstall(opened.Install, r);
+            FollowModpack(target, removes, removes);
         }
         Say($"Finished: {installs.Count} installed, {removes.Count} removed." + (byHand > 0 ? $" {byHand} line(s) still need fixing by hand." : ""));
         if (IsServer(target)) Say(RestartNote(target));
@@ -684,6 +702,13 @@ internal sealed class Cli(AppConfig cfg, string configPath, Args a)
             foreach (var r in changes.Remove) installer.Uninstall(opened.Install, r);
         }
         Say($"Applied '{pack.Name}': {builds.Count} installed or changed, {changes.Remove.Count} removed, {skipped.Count} skipped.");
+        if (cfg.Modpacks.Contains(pack) && c.ActiveModpack != pack.Name)
+        {
+            // As in the app: a saved modpack that was applied is the one this game or server follows from now on.
+            c.ActiveModpack = pack.Name;
+            cfg.Save(configPath);
+            Say($"'{c.Name}' now follows the modpack '{pack.Name}'.");
+        }
         if (IsServer(c)) Say(RestartNote(c));
         return Exit.Ok;
     }

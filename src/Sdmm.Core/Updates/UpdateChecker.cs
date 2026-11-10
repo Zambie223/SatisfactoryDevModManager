@@ -5,12 +5,14 @@ namespace Sdmm.Core.Updates;
 
 /// <summary>Where SDMM's own releases are published.</summary>
 /// <param name="AssetName">The release file holding the self-contained exe.</param>
-public sealed record UpdateSource(string Owner, string Repo, string AssetName)
+/// <param name="CompanionAssetName">Another exe from the same release that's updated with it when it's installed next to it (the command line tool).</param>
+public sealed record UpdateSource(string Owner, string Repo, string AssetName, string? CompanionAssetName = null)
 {
     public string ReleasesUrl => $"https://github.com/{Owner}/{Repo}/releases";
 }
 
-public sealed record AvailableUpdate(SemVersion Version, string Tag, bool Prerelease, string? Notes, string? HtmlUrl, GitHubAsset Asset);
+public sealed record AvailableUpdate(SemVersion Version, string Tag, bool Prerelease, string? Notes, string? HtmlUrl, GitHubAsset Asset,
+    GitHubAsset? CompanionAsset = null);
 
 public enum UpdateCheckStatus
 {
@@ -54,7 +56,8 @@ public static class UpdateChecker
             return new UpdateCheckResult(UpdateCheckStatus.UpToDate, null, $"SDMM {current} is up to date.");
 
         var update = new AvailableUpdate(best.Version!, best.Release.TagName, best.Release.Prerelease,
-            string.IsNullOrWhiteSpace(best.Release.Body) ? null : best.Release.Body.Trim(), best.Release.HtmlUrl, best.Asset!);
+            string.IsNullOrWhiteSpace(best.Release.Body) ? null : best.Release.Body.Trim(), best.Release.HtmlUrl, best.Asset!,
+            source.CompanionAssetName is { } companion ? best.Release.Assets.FirstOrDefault(a => a.Name.Equals(companion, StringComparison.OrdinalIgnoreCase)) : null);
         return new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, update, $"SDMM {update.Version} is available (you have {current}).");
     }
 }

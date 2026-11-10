@@ -109,6 +109,20 @@ public class UpdateCheckerTests
     }
 
     [Fact]
+    public async Task FindsTheCommandLineToolInTheSameRelease()
+    {
+        var release = """{ "id": 1, "tag_name": "v0.4.0", "prerelease": false, "draft": false, "assets": [ { "id": 9, "name": "SatisfactoryDevModManager.exe", "size": 100 }, { "id": 10, "name": "SatisfactoryDevModManager-cli.exe", "size": 50 } ] }""";
+        var http = new FakeHttp().OnJson("/repos/alice/SDMM/releases?per_page=100", $"[{release}]");
+        using var gh = new GitHubClient(null, handler: http);
+
+        var withCli = await UpdateChecker.CheckAsync(gh, Source with { CompanionAssetName = "SatisfactoryDevModManager-cli.exe" }, SemVersion.Parse("0.3.0"), ct: Ct);
+        Assert.Equal(10, withCli.Update!.CompanionAsset!.Id);
+
+        var without = await UpdateChecker.CheckAsync(gh, Source, SemVersion.Parse("0.3.0"), ct: Ct);
+        Assert.Null(without.Update!.CompanionAsset);
+    }
+
+    [Fact]
     public async Task UpToDateWhenNothingNewer()
     {
         var http = new FakeHttp().OnJson("/repos/alice/SDMM/releases?per_page=100", $"[{Release("v0.1.0")}]");

@@ -7,9 +7,16 @@ using Sdmm.Core.Modpacks;
 namespace Sdmm.App.ViewModels;
 
 /// <summary>One mod in the Modpacks window; edits write straight through to the <see cref="ModpackMod"/>.</summary>
-public sealed partial class ModpackModRow(ModpackMod mod) : ObservableObject
+public sealed partial class ModpackModRow : ObservableObject
 {
-    public ModpackMod Mod { get; } = mod;
+    public ModpackModRow(ModpackMod mod)
+    {
+        Mod = mod;
+        // Packs from before the automatic side was stored: their side was worked out automatically too.
+        if (!mod.SideSetByUser && mod.Side != mod.AutoSide) mod.AutoSide = mod.Side;
+    }
+
+    public ModpackMod Mod { get; }
     public string ModReference => Mod.ModReference;
     public string VersionText => Mod.Version ?? Mod.Constraint ?? "newest";
     public string SourceText => Mod.Source switch
@@ -25,16 +32,48 @@ public sealed partial class ModpackModRow(ModpackMod mod) : ObservableObject
         set { if (Mod.Enabled != value) { Mod.Enabled = value; OnPropertyChanged(); } }
     }
 
-    public static IReadOnlyList<string> SideOptions { get; } = ["Both", "Players only", "Server only"];
+    public static IReadOnlyList<string> SideOptions { get; } = ["Games and servers", "Players' games only", "Servers only"];
 
+    private static string Label(ModSide side) => side switch
+    {
+        ModSide.ClientOnly => "Players' games only",
+        ModSide.ServerOnly => "Servers only",
+        _ => "Games and servers",
+    };
+
+    /// <summary>Where the mod is installed. Picking the automatic value again counts as automatic.</summary>
     public string SideText
     {
-        get => Mod.Side switch { ModSide.ClientOnly => "Players only", ModSide.ServerOnly => "Server only", _ => "Both" };
+        get => Label(Mod.Side);
         set
         {
-            var side = value switch { "Players only" => ModSide.ClientOnly, "Server only" => ModSide.ServerOnly, _ => ModSide.Both };
-            if (Mod.Side != side) { Mod.Side = side; OnPropertyChanged(); }
+            var side = value switch { "Players' games only" => ModSide.ClientOnly, "Servers only" => ModSide.ServerOnly, _ => ModSide.Both };
+            if (Mod.Side == side) return;
+            Mod.Side = side;
+            Mod.SideSetByUser = side != Mod.AutoSide;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsAutoSide));
+            OnPropertyChanged(nameof(IsSideOverridden));
+            OnPropertyChanged(nameof(SideTip));
         }
+    }
+
+    public bool IsAutoSide => !Mod.SideSetByUser;
+    public bool IsSideOverridden => Mod.SideSetByUser;
+
+    public string SideTip => IsAutoSide
+        ? "Automatic: worked out from the mod's .uplugin when it was added (mods that set RequiredOnRemote to false go only on the side they were found on). Pick another value to override it."
+        : $"Set by you. Automatic would be: {Label(Mod.AutoSide)}.";
+
+    [RelayCommand]
+    private void ResetSide()
+    {
+        Mod.Side = Mod.AutoSide;
+        Mod.SideSetByUser = false;
+        OnPropertyChanged(nameof(SideText));
+        OnPropertyChanged(nameof(IsAutoSide));
+            OnPropertyChanged(nameof(IsSideOverridden));
+        OnPropertyChanged(nameof(SideTip));
     }
 }
 
@@ -44,19 +83,34 @@ public sealed partial class ModpackItem : ObservableObject
     public Modpack Pack { get; }
     public ObservableCollection<ModpackModRow> Rows { get; }
 
-    public ModpackItem(Modpack pack)
+    private readonly Func<ModpackItem, string, string> _uniqueName;
+    private readonly Action<string, string> _renamed;
+
+    /// <param name="uniqueName">Makes a typed name unique among the other packs.</param>
+    /// <param name="renamed">Called with the old and new name after a rename.</param>
+    public ModpackItem(Modpack pack, Func<ModpackItem, string, string> uniqueName, Action<string, string> renamed)
     {
         Pack = pack;
+        _uniqueName = uniqueName;
+        _renamed = renamed;
         Rows = new ObservableCollection<ModpackModRow>(pack.Mods.Select(m => new ModpackModRow(m)));
     }
 
+    /// <summary>Committed when the name box loses focus or Enter is pressed. Blank keeps the old name; a taken name gets " (2)".</summary>
     public string Name
     {
         get => Pack.Name;
         set
         {
-            var v = string.IsNullOrWhiteSpace(value) ? Pack.Name : value.Trim();
-            if (Pack.Name != v) { Pack.Name = v; OnPropertyChanged(); }
+            var v = string.IsNullOrWhiteSpace(value) ? Pack.Name : _uniqueName(this, value.Trim());
+            var old = Pack.Name;
+            if (old != v)
+            {
+                Pack.Name = v;
+                _renamed(old, v);
+            }
+            // Always: the box shows the name actually used (trimmed, or made unique).
+            OnPropertyChanged();
         }
     }
 
@@ -88,7 +142,7 @@ public sealed partial class ModpacksViewModel : ObservableObject
     public IReadOnlyList<string> SmmProfiles { get; }
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ExportCommand), nameof(DeleteCommand), nameof(ApplyCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand), nameof(DeleteCommand), nameof(ApplyCommand), nameof(DuplicateCommand))]
     private ModpackItem? _selected;
 
     [ObservableProperty] private ModpackModRow? _selectedRow;
@@ -106,7 +160,7 @@ public sealed partial class ModpacksViewModel : ObservableObject
     {
         _main = main;
         _dialogs = dialogs;
-        Packs = new ObservableCollection<ModpackItem>(main.Modpacks.Select(p => new ModpackItem(p)));
+        Packs = new ObservableCollection<ModpackItem>(main.Modpacks.Select(Item));
         Selected = Packs.FirstOrDefault();
         SmmProfiles = IsVariant ? main.SmmSettings.Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList() : [];
         SelectedSmmProfile = SmmProfiles.FirstOrDefault();
@@ -116,18 +170,34 @@ public sealed partial class ModpacksViewModel : ObservableObject
     /// <summary>Writes the modpacks back to the settings file (edits are made in place).</summary>
     public void Save() => _main.SaveModpacks();
 
+    private ModpackItem Item(Modpack pack) => new(pack, UniqueName, (old, now) =>
+    {
+        _main.ModpackRenamed(old, now);
+        Save();
+    });
+
+    /// <summary>Keeps names unique, so exported files, the list and the main window's picker stay unambiguous.</summary>
+    private string UniqueName(ModpackItem? self, string name)
+    {
+        var result = name;
+        for (int n = 2; _main.Modpacks.Any(p => p != self?.Pack && p.Name.Equals(result, StringComparison.OrdinalIgnoreCase)); n++)
+            result = $"{name} ({n})";
+        return result;
+    }
+
     private void Add(Modpack pack)
     {
-        // Keep names unique, so exported files and the list stay unambiguous.
-        var baseName = pack.Name;
-        for (int n = 2; _main.Modpacks.Any(p => p.Name.Equals(pack.Name, StringComparison.OrdinalIgnoreCase)); n++)
-            pack.Name = $"{baseName} ({n})";
+        pack.Name = UniqueName(null, pack.Name);
         _main.Modpacks.Add(pack);
-        var item = new ModpackItem(pack);
+        var item = Item(pack);
         Packs.Add(item);
         Selected = item;
         Save();
     }
+
+    /// <summary>A separate copy of the selected pack, to change without touching the original.</summary>
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private void Duplicate() => Add(Selected!.Pack.Copy(Selected.Name + " (copy)", DateTimeOffset.UtcNow));
 
     [RelayCommand]
     private async Task NewFromInstallAsync()

@@ -59,13 +59,16 @@ Tick or untick each line before you click **Match**.
 A modpack is a named list of mods and versions; SMM calls these profiles. Open **Modpacks…** in the sidebar to:
 
 - **Save** the selected game or server as a modpack.
+- **Duplicate** a modpack to change a copy of it.
 - **Export** a modpack to a `.modpack.json` file, or **import** one someone sent you.
-- **Edit** a modpack: switch mods on or off, remove them, or set where each goes (both, players only, or server only).
+- **Edit** a modpack: rename it, switch mods on or off, remove them, or set where each is installed (games and servers, players' games only, or servers only).
 - **Apply** it to the selected game or server.
 
-Applying installs or updates what's needed and, if you tick the option, removes SDMM-managed mods that aren't in the pack. Everything is listed in one confirmation first.
+Applying installs or updates what's needed and, if you tick the option, also removes mods SDMM installed that aren't in the pack. Everything is listed in one confirmation first.
 
-Modpacks don't contain files, so one pack works everywhere. The right build is picked for whatever it's applied to: Windows for a game, LinuxServer or WindowsServer for a server. Mods marked for players only are skipped on a server, and mods marked for the server only are skipped on a game. When you save a pack, mods whose `.uplugin` sets `RequiredOnRemote` to false are marked for the side they were found on.
+Modpacks don't contain files, so one pack works everywhere. The right build is picked for whatever it's applied to: Windows for a game, LinuxServer or WindowsServer for a server. Mods set to players' games only are skipped on a server, and mods set to servers only are skipped on a game. When you save a pack, mods whose `.uplugin` sets `RequiredOnRemote` to false are set to the side they were found on; these are marked "auto", and you can change them.
+
+**The modpack a game or server follows.** Under the game or server list, pick the modpack it follows, like an SMM profile. Mods you install, update or remove with SDMM (or the command line tool) then update that modpack. If the game or server changes some other way, for example through SMM, a banner shows what's different and offers to update the modpack or apply it. Applying a saved modpack also makes it the one that game or server follows.
 
 Mods in a pack that come from SMR are listed but not installed; install those with SMM. GitHub dev builds and imported zips are installed by SDMM.
 
@@ -114,7 +117,11 @@ SDMM also flags problems with installed mods, with an explanation in the details
 - a missing or mismatched dependency
 - a dev build that SMM will replace because your SMM profile still lists the mod
 
-Pick **Has problems** in the filter to list just those mods.
+Pick **Has problems** under **Filters** to list just those mods.
+
+## Finding mods in the list
+
+Each row says what the mod can be installed from and who installed the copy here. The search box matches names, references, repos, descriptions and authors. **Filters** combines where a mod is available from, who installed it, whether it's installed, and whether it has an update or a problem, and sorts the list. The filters in effect are shown under the search box; click one to remove it.
 
 When a dependency is missing or the wrong version, a banner above the list offers **Install missing dependencies** (the mod's details panel has the same button). SDMM installs it from your sources, choosing a version that suits every installed mod that needs it. If one isn't in your sources, it tells you to install that one with SMM, or to add the repo that publishes it.
 
@@ -168,7 +175,7 @@ SatisfactoryDevModManager-cli modpack "Coop" --on "IB Server"
 - `--yes` doesn't trust a server key seen for the first time (add `--accept-new-host-key` after comparing it with your host's) or install a file VirusTotal flags (add `--allow-flagged`). VirusTotal checks run if you've turned them on in the app.
 - The same safety checks apply as in the app: the game must be closed, mods SMM or someone else installed are left alone, and a hosted server that's running is detected.
 - Exit codes: 0 done, 1 error, 2 bad arguments, 3 stopped (declined or refused), 4 the server's files are locked (stop the server, then try again).
-- `--help` lists everything. The command line tool doesn't update itself; download the new one from the release page when you update the app.
+- `--help` lists everything. The command line tool doesn't update itself. If it's in the same folder as the app, the app's update replaces it too; otherwise download the new one from the release page when you update the app.
 
 ## Where SDMM keeps its files
 

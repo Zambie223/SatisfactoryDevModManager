@@ -36,6 +36,11 @@ public sealed class InstallConfig
     /// launch options in Steam. Steam's own launch options don't apply, because Play starts the install's exe directly.
     /// </summary>
     public string? LaunchOptions { get; set; }
+    /// <summary>
+    /// The modpack this game or server follows (by name), like SMM's selected profile: SDMM's own changes here update
+    /// it, and other differences are pointed out. Null for none.
+    /// </summary>
+    public string? ActiveModpack { get; set; }
     /// <summary>Platform to assume when the host does not expose Engine/Binaries (see GameInstall.TargetOverride).</summary>
     [JsonConverter(typeof(JsonStringEnumConverter<Packaging.ModTarget>))]
     public Packaging.ModTarget? TargetOverride { get; set; }

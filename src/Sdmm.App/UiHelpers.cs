@@ -60,6 +60,16 @@ public sealed class EmptyToCollapsedConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>
+/// true → false and back. Used to make a dropdown's toggle ignore clicks while its popup is open: the click that closes
+/// the popup would otherwise reopen it.
+/// </summary>
+public sealed class NotConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value is not true;
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => value is not true;
+}
+
 /// <summary>Empty or null string → Visible (used for placeholder text), otherwise Collapsed.</summary>
 public sealed class EmptyToVisibleConverter : IValueConverter
 {

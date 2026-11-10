@@ -15,6 +15,7 @@
             <local:AllTrueToVisibilityConverter x:Key="AllTrueToVis" />
             <local:EmptyToVisibleConverter x:Key="EmptyToVisible" />
             <local:EmptyToCollapsedConverter x:Key="EmptyToCollapsed" />
+            <local:NotConverter x:Key="Not" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

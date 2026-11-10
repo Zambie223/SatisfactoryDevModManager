@@ -55,6 +55,10 @@
                               IsSynchronizedWithCurrentItem="False" IsEnabled="{Binding CanSwitchInstall}"
                               Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}" />
                     <TextBlock Text="{Binding SelectedInstall.Status}" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="2,6,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="Modpack" Foreground="{StaticResource SubtleTextBrush}" FontSize="12" Margin="2,10,0,4" />
+                    <ComboBox ItemsSource="{Binding ActiveModpackChoices}" SelectedItem="{Binding ActiveModpackChoice}" IsEnabled="{Binding CanSwitchInstall}"
+                              IsSynchronizedWithCurrentItem="False" AutomationProperties.Name="Modpack"
+                              ToolTip="The modpack this game or server follows, like SMM's profile. Mods you install, update or remove here update it." />
                     <Button Style="{StaticResource SidebarButton}" Content="Open Mods folder" Tag="&#xE8DA;" Command="{Binding OpenModsFolderCommand}" Margin="0,8,0,0"
                             Visibility="{Binding IsEnabled, RelativeSource={RelativeSource Self}, Converter={StaticResource BoolToVis}}"
                             ToolTip="Opens this installation's Mods folder in Explorer" />
@@ -93,7 +97,7 @@
                 <Grid Margin="12,8,12,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" MinWidth="140" />
-                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -105,8 +109,73 @@
                         <TextBlock Text="Search mods" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="32,0,0,0"
                                    IsHitTestVisible="False" Visibility="{Binding SearchText, Converter={StaticResource EmptyToVisible}}" />
                     </Grid>
-                    <ComboBox Grid.Column="1" ItemsSource="{Binding Source={x:Static vm:MainViewModel.FilterOptions}}"
-                              SelectedItem="{Binding SelectedFilter}" Margin="8,0,0,0" />
+                    <!-- Filters and sorting: presets, then groups (any ticked option in a group matches; groups combine) -->
+                    <Grid Grid.Column="1" Margin="8,0,0,0">
+                        <ToggleButton x:Name="FilterToggle" Style="{StaticResource FilterMenuButton}" IsChecked="{Binding IsFilterMenuOpen}"
+                                      IsHitTestVisible="{Binding IsOpen, ElementName=FilterPopup, Converter={StaticResource Not}}"
+                                      AutomationProperties.Name="Filters" ToolTip="Filter and sort the list">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE71C;" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding FilterButtonText}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <Popup x:Name="FilterPopup" IsOpen="{Binding IsFilterMenuOpen}" PlacementTarget="{Binding ElementName=FilterToggle}" Placement="Bottom"
+                               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="4"
+                                    Padding="14,12" Margin="0,4,0,0" Width="340">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Quick filters" Margin="0,0,0,6" />
+                                    <ItemsControl ItemsSource="{Binding Source={x:Static vm:MainViewModel.FilterPresets}}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource ChipButton}" Content="{Binding}" CommandParameter="{Binding}"
+                                                        Command="{Binding DataContext.ApplyPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Show" />
+                                    <ComboBox ItemsSource="{Binding Source={x:Static vm:MainViewModel.StatusOptions}}" SelectedItem="{Binding StatusFilter}"
+                                              Background="{StaticResource ControlOnPanelBrush}" AutomationProperties.Name="Show" />
+
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Available from" />
+                                    <WrapPanel>
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="GitHub" IsChecked="{Binding FromGitHub}"
+                                                      ToolTip="Mods with dev builds in your GitHub sources, or installed by SDMM from GitHub" />
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="Imported zip" IsChecked="{Binding FromZip}"
+                                                      ToolTip="Mods added with Install from zip" />
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="SMR" IsChecked="{Binding FromSmr}"
+                                                      Visibility="{Binding IsVariant, Source={x:Static local:Brand.Current}, Converter={StaticResource BoolToVis}}"
+                                                      ToolTip="Mods published on SMR (ficsit.app)" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Installed here by" />
+                                    <WrapPanel>
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="SDMM" IsChecked="{Binding BySdmm}" />
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="SMM" IsChecked="{Binding BySmm}" />
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="Host or by hand" IsChecked="{Binding ByOther}"
+                                                      ToolTip="Installed by a server host's mod tool, or copied in by hand" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Only" />
+                                    <WrapPanel>
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="Updates available" IsChecked="{Binding OnlyUpdates}" />
+                                        <ToggleButton Style="{StaticResource FilterChip}" Content="Has problems" IsChecked="{Binding OnlyProblems}" />
+                                    </WrapPanel>
+
+                                    <TextBlock Style="{StaticResource FilterGroupHeader}" Text="Sort by" />
+                                    <ComboBox ItemsSource="{Binding Source={x:Static vm:MainViewModel.SortOptions}}" SelectedItem="{Binding SortBy}"
+                                              Background="{StaticResource ControlOnPanelBrush}" AutomationProperties.Name="Sort by" />
+
+                                    <Button Style="{StaticResource GreyButton}" Content="Clear filters" Command="{Binding ClearFiltersCommand}"
+                                            HorizontalAlignment="Left" Margin="0,14,0,0" Padding="12,5" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                     <TextBlock Grid.Column="2" Text="{Binding ModCountText}" Foreground="{StaticResource SubtleTextBrush}"
                                VerticalAlignment="Center" Margin="12,0,2,0" />
                     <Button Grid.Column="3" Style="{StaticResource AccentButton}" Command="{Binding UpdateAllCommand}" Margin="10,0,0,0" AutomationProperties.Name="{Binding UpdateAllText}" ToolTipService.ShowOnDisabled="True"
@@ -117,6 +186,24 @@
                         </StackPanel>
                     </Button>
                 </Grid>
+                <!-- Filters in effect, each removable -->
+                <ItemsControl ItemsSource="{Binding ActiveFilters}" Margin="12,0,12,8"
+                              Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource ChipButton}" CommandParameter="{Binding Key}" AutomationProperties.Name="{Binding Label, StringFormat=Remove filter {0}}"
+                                    Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=Window}}" ToolTip="Remove this filter">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                    <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="9" VerticalAlignment="Center" Margin="8,1,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <!-- SMR catalog, hand back and takeover -->
                 <WrapPanel Margin="12,0,12,8"
                            Visibility="{Binding IsVariant, Source={x:Static local:Brand.Current}, Converter={StaticResource BoolToVis}}">
@@ -156,6 +243,23 @@
                         <TextBlock Text="{Binding ServerLockText}" TextWrapping="Wrap" Foreground="{StaticResource WarnBrush}" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Visibility="{Binding ServerLockText, Converter={StaticResource EmptyToCollapsed}}" />
                     </StackPanel>
+                </DockPanel>
+            </Border>
+            <!-- The game or server differs from the modpack it follows (changed outside SDMM) -->
+            <Border Background="{StaticResource BgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="0,0,0,2" Padding="14,8"
+                    Visibility="{Binding ModpackMismatchText, Converter={StaticResource EmptyToCollapsed}}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE8F1;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                               Foreground="{StaticResource InfoBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <Button Style="{StaticResource GreyButton}" Content="Update the modpack" Command="{Binding UpdateActiveModpackCommand}" Margin="0,0,6,0"
+                                ToolTip="Change the modpack to match what's installed here" />
+                        <Button Style="{StaticResource AccentButton}" Content="Apply the modpack" Command="{Binding ApplyActiveModpackCommand}" Margin="0,0,6,0"
+                                ToolTip="Install, update and remove mods here to match the modpack. Shows every change first." />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE711;" Command="{Binding HideModpackMismatchCommand}"
+                                ToolTip="Hide until something changes" AutomationProperties.Name="Hide" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding ModpackMismatchText}" TextWrapping="Wrap" VerticalAlignment="Center" ToolTip="{Binding ModpackMismatchDetail}" />
                 </DockPanel>
             </Border>
             <!-- Dependencies of the listed mods that are missing or the wrong version, with the fix one click away -->
@@ -226,6 +330,8 @@
                                         <TextBlock Text="{Binding ProblemShort}" Foreground="{StaticResource WarnBrush}" FontSize="12" FontWeight="SemiBold" />
                                     </StackPanel>
                                 </StackPanel>
+                                <TextBlock Text="{Binding SourceLine}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                                           Visibility="{Binding SourceLine, Converter={StaticResource EmptyToCollapsed}}" />
                             </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Style="{StaticResource IconButton}" Content="&#xE896;" ToolTip="{Binding InstallTip}" ToolTipService.ShowOnDisabled="True"

@@ -120,4 +120,91 @@ public class ModpackTests
         Assert.Contains(newest.Install, m => m.ModReference == "Same");
         Assert.Empty(newest.Remove);
     }
+
+    [Fact]
+    public void CaptureRecordsTheAutomaticSide()
+    {
+        var pack = ModpackIO.FromInstall("Solo", [Mod("DepotFix", "1.0.0", ModOwner.Sdmm, "bob/DepotFix", """, "RequiredOnRemote": false""")], isServer: false, Smr, Now);
+        var m = Assert.Single(pack.Mods);
+        Assert.Equal((ModSide.ClientOnly, ModSide.ClientOnly, false), (m.Side, m.AutoSide, m.SideSetByUser));
+    }
+
+    [Fact]
+    public void CopyIsIndependent()
+    {
+        var pack = new Modpack { Name = "Coop", Mods = [new ModpackMod { ModReference = "ModA", Version = "1.0.0", Side = ModSide.ServerOnly, SideSetByUser = true }] };
+        var copy = pack.Copy("Coop (copy)", Now);
+        copy.Mods[0].Version = "2.0.0";
+        copy.Mods.Add(new ModpackMod { ModReference = "ModB" });
+
+        Assert.Equal("Coop (copy)", copy.Name);
+        Assert.Equal("1.0.0", pack.Mods[0].Version);
+        Assert.Single(pack.Mods);
+        Assert.Equal((ModSide.ServerOnly, true), (copy.Mods[0].Side, copy.Mods[0].SideSetByUser));
+    }
+
+    [Fact]
+    public void FollowTakesInSdmmsChangesOnly()
+    {
+        var pack = new Modpack
+        {
+            Name = "Coop",
+            Mods =
+            [
+                new ModpackMod { ModReference = "Updated", Version = "1.0.0", Source = ModpackSource.GitHub, Repo = "bob/Updated" },
+                new ModpackMod { ModReference = "Removed", Version = "1.0.0" },
+                new ModpackMod { ModReference = "Missing", Version = "1.0.0" },     // not installed, but not removed by SDMM
+                new ModpackMod { ModReference = "Ranged", Constraint = ">=1.0.0" },
+                new ModpackMod { ModReference = "Picked", Version = "1.0.0", Side = ModSide.Both, AutoSide = ModSide.ClientOnly, SideSetByUser = true },
+            ],
+        };
+        var installed = new[]
+        {
+            Mod("Updated", "1.1.0", ModOwner.Sdmm, "bob/Updated"),
+            Mod("Added", "2.0.0", ModOwner.Sdmm, Smr + "Added"),
+            Mod("Ranged", "1.4.0", ModOwner.Smm),
+            Mod("Picked", "1.2.0", ModOwner.Sdmm, "bob/Picked", """, "RequiredOnRemote": false"""),
+            Mod("Outside", "1.0.0", ModOwner.Smm),     // installed elsewhere: not in the list of changes
+        };
+
+        Assert.True(ModpackIO.Follow(pack, installed, isServer: false, Smr,
+            ["Updated", "Added", "Removed", "Missing", "Ranged", "Picked"], ["Removed"], Now));
+        var byRef = pack.Mods.ToDictionary(m => m.ModReference);
+
+        Assert.Equal("1.1.0", byRef["Updated"].Version);
+        Assert.Equal(ModpackSource.Smr, byRef["Added"].Source);
+        Assert.False(byRef.ContainsKey("Removed"));
+        Assert.True(byRef.ContainsKey("Missing"));
+        Assert.Equal((">=1.0.0", null), (byRef["Ranged"].Constraint, byRef["Ranged"].Version)); // 1.4.0 still fits the range
+        Assert.Equal((ModSide.Both, true, "1.2.0"), (byRef["Picked"].Side, byRef["Picked"].SideSetByUser, byRef["Picked"].Version));
+        Assert.False(byRef.ContainsKey("Outside"));
+        Assert.Equal(pack.Mods.OrderBy(m => m.ModReference, StringComparer.OrdinalIgnoreCase).Select(m => m.ModReference), pack.Mods.Select(m => m.ModReference));
+
+        // Nothing new: no change.
+        Assert.False(ModpackIO.Follow(pack, installed, isServer: false, Smr, ["Updated"], null, Now));
+    }
+
+    [Fact]
+    public void FollowingEverythingMakesThePackMatch()
+    {
+        var pack = new Modpack
+        {
+            Name = "Coop",
+            Mods =
+            [
+                new ModpackMod { ModReference = "Gone", Version = "1.0.0" },
+                new ModpackMod { ModReference = "ServerThing", Version = "1.0.0", Side = ModSide.ServerOnly, AutoSide = ModSide.ServerOnly },
+                new ModpackMod { ModReference = "Off", Version = "1.0.0", Enabled = false },
+            ],
+        };
+        var installed = new[] { Mod("Outside", "1.0.0", ModOwner.Smm) };
+
+        var (missing, extra) = ModpackIO.Compare(pack, installed, isServer: false);
+        Assert.Equal(["Gone"], missing);
+        Assert.Equal(["Outside"], extra);
+
+        ModpackIO.Follow(pack, installed, isServer: false, Smr, null, null, Now);
+        Assert.Equal(["Off", "Outside", "ServerThing"], pack.Mods.Select(m => m.ModReference)); // other side and switched-off entries stay
+        Assert.Equal((0, 0), (ModpackIO.Compare(pack, installed, isServer: false).Missing.Count, ModpackIO.Compare(pack, installed, isServer: false).Extra.Count));
+    }
 }

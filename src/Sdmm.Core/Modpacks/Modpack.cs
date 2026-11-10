@@ -45,7 +45,24 @@ public sealed class ModpackMod
     public string? Repo { get; set; }
     [JsonConverter(typeof(JsonStringEnumConverter<ModSide>))]
     public ModSide Side { get; set; } = ModSide.Both;
+
+    /// <summary>
+    /// The side worked out automatically when the mod was added (from its .uplugin; "both" when that isn't known).
+    /// <see cref="Side"/> equals it unless <see cref="SideSetByUser"/>.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<ModSide>))]
+    public ModSide AutoSide { get; set; } = ModSide.Both;
+
+    /// <summary>The user picked <see cref="Side"/> in the modpack, overriding <see cref="AutoSide"/>.</summary>
+    public bool SideSetByUser { get; set; }
+
     public bool Enabled { get; set; } = true;
+
+    public ModpackMod Clone() => new()
+    {
+        ModReference = ModReference, Version = Version, Constraint = Constraint, Source = Source, Repo = Repo,
+        Side = Side, AutoSide = AutoSide, SideSetByUser = SideSetByUser, Enabled = Enabled,
+    };
 
     /// <summary>Whether this mod belongs on a server (true) or a player's game (false).</summary>
     public bool AppliesTo(bool server) => Side switch
@@ -62,6 +79,9 @@ public sealed class Modpack
     public string Name { get; set; } = "Modpack";
     public List<ModpackMod> Mods { get; set; } = [];
     public DateTimeOffset CreatedAtUtc { get; set; }
+
+    /// <summary>A separate copy with every mod and setting (Duplicate in the Modpacks window).</summary>
+    public Modpack Copy(string name, DateTimeOffset now) => new() { Name = name, Mods = Mods.Select(m => m.Clone()).ToList(), CreatedAtUtc = now };
 }
 
 /// <summary>Where an exported modpack came from; informational, applying works on any platform.</summary>
@@ -110,16 +130,78 @@ public static partial class ModpackIO
                 : repo.StartsWith(smrSourcePrefix, StringComparison.OrdinalIgnoreCase) ? (ModpackSource.Smr, null)
                 : (ModpackSource.GitHub, repo)
                 : (ModpackSource.Smr, null);
+            var side = m.Descriptor!.IsRequiredOnRemote ? ModSide.Both : isServer ? ModSide.ServerOnly : ModSide.ClientOnly;
             mods.Add(new ModpackMod
             {
                 ModReference = m.ModReference,
-                Version = m.Descriptor!.EffectiveVersion.ToString(),
+                Version = m.Descriptor.EffectiveVersion.ToString(),
                 Source = source,
                 Repo = ghRepo,
-                Side = m.Descriptor.IsRequiredOnRemote ? ModSide.Both : isServer ? ModSide.ServerOnly : ModSide.ClientOnly,
+                Side = side,
+                AutoSide = side,
             });
         }
         return new Modpack { Name = name, Mods = mods.OrderBy(x => x.ModReference, StringComparer.OrdinalIgnoreCase).ToList(), CreatedAtUtc = now };
+    }
+
+    /// <summary>
+    /// Brings a modpack in line with what's installed, for the given mods (or for every mod when <paramref name="mods"/>
+    /// is null). An installed mod is added, or its entry updated to the installed version and source (switched on; a
+    /// side the user picked is kept). A mod that's gone is dropped from the pack only if it's in
+    /// <paramref name="removed"/> (or when every mod is followed), and only when the pack has it for this kind of
+    /// install; entries for the other side, and switched-off ones, stay. Returns whether the pack changed.
+    /// </summary>
+    public static bool Follow(Modpack pack, IReadOnlyList<InstalledMod> installed, bool isServer, string smrSourcePrefix,
+        IReadOnlyCollection<string>? mods, IReadOnlyCollection<string>? removed, DateTimeOffset now)
+    {
+        var captured = FromInstall("", installed, isServer, smrSourcePrefix, now).Mods.ToDictionary(m => m.ModReference, StringComparer.OrdinalIgnoreCase);
+        var present = installed.Select(m => m.ModReference).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var scope = mods is not null ? mods.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : pack.Mods.Select(m => m.ModReference).Concat(captured.Keys).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool changed = false;
+        foreach (var r in scope)
+        {
+            var entry = pack.Mods.FirstOrDefault(m => m.ModReference.Equals(r, StringComparison.OrdinalIgnoreCase));
+            if (captured.TryGetValue(r, out var cur))
+            {
+                if (entry is null)
+                {
+                    pack.Mods.Add(cur);
+                    changed = true;
+                    continue;
+                }
+                var installedVersion = SemVersion.TryParse(cur.Version!, out var iv) ? iv : null;
+                // An entry with only a range (from an SMM profile) keeps it while the installed version fits.
+                bool fits = entry.Version is null && entry.Constraint is not null && installedVersion is not null &&
+                            VersionRange.TryParse(entry.Constraint, out var range, out _) && range!.Matches(installedVersion);
+                var before = (entry.Version, entry.Constraint, entry.Source, entry.Repo, entry.Enabled, entry.Side, entry.AutoSide);
+                if (!fits) { entry.Version = cur.Version; entry.Constraint = null; }
+                entry.Source = cur.Source;
+                entry.Repo = cur.Repo;
+                entry.Enabled = true;
+                entry.AutoSide = cur.AutoSide;
+                if (!entry.SideSetByUser || !entry.AppliesTo(isServer)) { entry.Side = cur.Side; entry.SideSetByUser = false; }
+                changed |= before != (entry.Version, entry.Constraint, entry.Source, entry.Repo, entry.Enabled, entry.Side, entry.AutoSide);
+            }
+            else if (entry is not null && !present.Contains(r) && entry.Enabled && entry.AppliesTo(isServer) &&
+                     (mods is null || removed?.Contains(r) == true))
+            {
+                pack.Mods.Remove(entry);
+                changed = true;
+            }
+        }
+        if (changed) pack.Mods.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.ModReference, b.ModReference));
+        return changed;
+    }
+
+    /// <summary>
+    /// How the install differs from the pack: pack mods to install or change here, and installed mods the pack doesn't
+    /// have. Both empty means it matches.
+    /// </summary>
+    public static (IReadOnlyList<string> Missing, IReadOnlyList<string> Extra) Compare(Modpack pack, IReadOnlyList<InstalledMod> installed, bool isServer)
+    {
+        var changes = ModpackPlanner.Plan(pack, installed, isServer, removeOthers: true, useNewest: false);
+        return (changes.Install.Select(m => m.ModReference).ToList(), changes.Remove.Concat(changes.KeptForeign).ToList());
     }
 
     /// <summary>

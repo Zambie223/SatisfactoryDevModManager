@@ -196,6 +196,46 @@ public sealed partial class ModRow : ObservableObject
     /// <summary>"owner/repo" of the newest GitHub build (or of the installed one), else "" for mods only known from imported zips.</summary>
     public string Source => Discovered?.Builds.FirstOrDefault(b => !b.IsImported)?.RepoFullName ?? Installed?.Marker?.SourceRepo ?? "";
 
+    /// <summary>Dev builds come from a GitHub source, or the installed copy is one SDMM got from GitHub.</summary>
+    public bool FromGitHub => Discovered?.Builds.Any(b => !b.IsImported) == true ||
+                              Installed is { Owner: ModOwner.Sdmm, Marker.SourceRepo: { } repo } && !IsFromSmr && repo.Contains('/');
+
+    /// <summary>An imported zip has it, or the installed copy is one SDMM installed from a zip.</summary>
+    public bool FromZip => Discovered?.Builds.Any(b => b.IsImported) == true ||
+                           Installed is { Owner: ModOwner.Sdmm, Marker: { SourceRepo: null, IsAdoptedCopy: false } };
+
+    /// <summary>When the newest dev build or SMR release came out, for sorting.</summary>
+    public DateTimeOffset? NewestReleaseDate =>
+        new[] { Latest?.Build.PublishedAt, Smr?.LatestReleaseDate }.Where(d => d is not null).Max();
+
+    /// <summary>Where it can be installed from, for the list row ("GitHub · SMR"); SMR only where SMR installs are possible.</summary>
+    public string AvailableText
+    {
+        get
+        {
+            var from = new List<string>();
+            if (Discovered?.Builds.Any(b => !b.IsImported) == true) from.Add("GitHub");
+            if (Discovered?.Builds.Any(b => b.IsImported) == true) from.Add("imported zip");
+            if (Variant && HasSmr) from.Add("SMR");
+            return from.Count == 0 ? "" : "Available: " + string.Join(" · ", from);
+        }
+    }
+
+    /// <summary>The row's "where from" line: what it can be installed from, then who installed the copy here.</summary>
+    public string SourceLine => string.Join("   ·   ", new[] { AvailableText, InstalledByText }.Where(t => t.Length > 0));
+
+    /// <summary>Who installed the copy here and where it came from, for the list row; empty when not installed.</summary>
+    public string InstalledByText => Installed switch
+    {
+        null => "",
+        { Owner: ModOwner.Smm } => "Installed by SMM",
+        { Owner: ModOwner.Unmanaged } => OnServer ? "Installed by the host or by hand" : "Installed by hand",
+        { Marker: { IsAdoptedCopy: true } } => Variant ? "Managed by SDMM (taken over)" : "Managed by SDMM",
+        _ when IsFromSmr => Variant ? "Installed by SDMM from SMR" : "Managed by SDMM",
+        { Marker.SourceRepo: null } => "Installed by SDMM from a zip",
+        _ => "Installed by SDMM from GitHub",
+    };
+
     /// <summary>
     /// SDMM manages it because it was taken over or installed from SMR (not a dev build). Outside the branding variant such
     /// mods are labelled plainly as SDMM's, without where they came from.
@@ -253,6 +293,9 @@ public sealed partial class ModRow : ObservableObject
     /// <summary>Longer explanation shown in the details panel.</summary>
     public string StateDetail => State switch
     {
+        // Where takeovers are available, installing over another tool's copy is offered (and asked about) instead.
+        ModState.ManagedBySmm or ModState.Manual when Variant =>
+            $"{(State == ModState.ManagedBySmm ? "SMM" : OnServer ? "The host or a hand copy" : "A hand copy")} installed this mod. Installing a dev build or an SMR release here takes it over first; SDMM asks before changing anything.",
         ModState.ManagedBySmm => OnServer
             ? "SMM installed this mod on the server, so SDMM won't change it. Update or remove it in SMM; to test a dev build here, remove it from the server's SMM profile first."
             : "SMM installed this mod, so SDMM won't change it. To test a dev build, remove it from your SMM profile and apply in SMM, then install it here.",
@@ -284,11 +327,18 @@ public sealed partial class ModRow : ObservableObject
 
     public string OwnerBadgeTip => Installed?.Owner switch
     {
-        ModOwner.Sdmm => "Managed by SDMM (marked with .sdmm.json); SDMM can update or remove it.",
+        ModOwner.Sdmm => "Managed by SDMM (marked with .sdmm.json); SDMM can update or remove it." + OriginNote,
         ModOwner.Smm => "Installed by SMM (marked with .smm); manage it in SMM.",
         null => "",
         _ => OnServer ? "Installed by your host's mod tool or by hand; SDMM leaves it alone." : "Installed by hand or by another tool; SDMM leaves it alone.",
     };
+
+    /// <summary>
+    /// The badge shows where the files came from; a takeover that was later updated from SMR keeps its history here.
+    /// </summary>
+    private string OriginNote => Variant && Installed?.Marker is { AdoptedFrom: { } from, IsAdoptedCopy: false }
+        ? $" Originally taken over from {(from == SdmmMarker.AdoptedFromSmm ? "SMM" : OnServer ? "the host or a hand copy" : "a hand copy")}."
+        : "";
 
     /// <summary>Installed by SMM, the host or by hand: SDMM won't install over it or remove it.</summary>
     public bool IsManagedElsewhere => Installed is { Owner: not ModOwner.Sdmm };
@@ -315,13 +365,15 @@ public sealed partial class ModRow : ObservableObject
 
     /// <summary>Tooltip on the Install buttons: why it's disabled, when it is.</summary>
     public string InstallTip => UseSmrSource
-        ? (Smr is null ? "Not on SMR." : "Install from SMR with what it needs. Shows what will change first.")
+        ? (Smr is null ? "Not on SMR." : $"{ActionText} (the published release, with what it needs). Shows what will change first.")
         : Installed?.Owner switch
     {
+        ModOwner.Smm or ModOwner.Unmanaged when Variant && SelectedBuild?.Build.Version is not null =>
+            $"{ActionText}: takes it over from {(Installed.Owner == ModOwner.Smm ? "SMM" : OnServer ? "the host or a hand copy" : "a hand copy")} first (asks before changing anything).",
         ModOwner.Smm => "Managed by SMM: SDMM won't install over it. Change it in SMM.",
         ModOwner.Unmanaged => OnServer ? "Installed by the host or by hand: SDMM won't install over it." : "Installed outside SDMM: SDMM won't install over it.",
         _ when SelectedBuild?.Build.Version is null => "No build for this platform to install.",
-        _ => "Install the selected build",
+        _ => $"{ActionText} ({(SelectedBuild!.Build.IsImported ? "an imported zip" : "dev build from " + SelectedBuild.Build.RepoFullName)})",
     };
 
     public string RemoveTip => Installed?.Owner switch
@@ -395,7 +447,8 @@ public sealed partial class ModRow : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSmr), nameof(Description), nameof(DisplayName), nameof(SmrAuthorsText), nameof(SmrStatsText),
         nameof(SmrReleaseText), nameof(SmrCompatText), nameof(SmrTagsText), nameof(SmrFullDescription), nameof(SmrPageUrl), nameof(SmrComparisonText),
         nameof(SmrUpdateVersion), nameof(State), nameof(StateText), nameof(StateBrush), nameof(Owner), nameof(ByText), nameof(CanHandBack), nameof(HandBackTo), nameof(HandBackText), nameof(HandBackTip),
-        nameof(CanChooseSource), nameof(CanInstall), nameof(ActionText), nameof(InstallSourceText), nameof(InstallTip), nameof(ReleaseNotes))]
+        nameof(CanChooseSource), nameof(CanInstall), nameof(ActionText), nameof(InstallSourceText), nameof(InstallTip), nameof(ReleaseNotes),
+        nameof(AvailableText), nameof(NewestReleaseDate), nameof(SourceLine))]
     private Sdmm.Core.Smr.SmrMod? _smr;
 
     /// <summary>Installed from SMR by SDMM (the marker's source is "ficsit.app/&lt;ModRef&gt;").</summary>
@@ -531,14 +584,16 @@ public sealed partial class ModRow : ObservableObject
                 if (pinned is null) return SmrUpdateVersion is { } u ? $"Update to {u} from SMR" : "Install the newest from SMR";
                 return pinned == InstalledSemVer ? $"Reinstall {pinned} from SMR" : $"Switch to {pinned} from SMR";
             }
-            if (Installed is { Owner: ModOwner.Smm }) return "Managed by SMM";
-            if (Installed is { Owner: ModOwner.Unmanaged }) return OnServer ? "Installed by the host or by hand" : "Installed outside SDMM";
+            if (!Variant && Installed is { Owner: ModOwner.Smm }) return "Managed by SMM";
+            if (!Variant && Installed is { Owner: ModOwner.Unmanaged }) return OnServer ? "Installed by the host or by hand" : "Installed outside SDMM";
             var v = SelectedBuild?.Build.Version;
             var iv = InstalledSemVer;
-            if (Installed is null || iv is null || v is null) return "Install";
-            if (v > iv) return $"Update to {SelectedBuild!.Build.Tag}";
-            if (v < iv) return $"Switch to {SelectedBuild!.Build.Tag}";
-            return "Reinstall";
+            // Where SMR is the other choice, say which source this is.
+            var from = Variant && HasSmr ? (SelectedBuild?.Build.IsImported == true ? " from the zip" : " from GitHub") : "";
+            if (Installed is null || iv is null || v is null) return "Install" + (v is null ? "" : $" {SelectedBuild!.Build.Tag}") + from;
+            if (v > iv) return $"Update to {SelectedBuild!.Build.Tag}{from}";
+            if (v < iv) return $"Switch to {SelectedBuild!.Build.Tag}{from}";
+            return "Reinstall" + from;
         }
     }
 
@@ -578,7 +633,8 @@ public sealed partial class ModRow : ObservableObject
     public bool CanInstall => UseSmrSource
         // SMR installs take over other tools' copies themselves (after asking), so any owner is fine.
         ? Smr is not null && (SelectedSmrVersion is null || SelectedSmrVersion.Version is null || SelectedSmrVersion.Fits)
-        : SelectedBuild?.Build.Version is not null && Installed?.Owner is null or ModOwner.Sdmm;
+        // Dev builds go over other tools' copies only where takeovers are available (the install asks first).
+        : SelectedBuild?.Build.Version is not null && (Variant || Installed?.Owner is null or ModOwner.Sdmm);
     public bool CanRemove => Installed?.Owner == ModOwner.Sdmm;
 }
 

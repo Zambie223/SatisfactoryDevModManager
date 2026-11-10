@@ -74,7 +74,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle), nameof(CanSwitchInstall))]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand), nameof(InstallCommand), nameof(RemoveCommand), nameof(SyncFromServerCommand), nameof(ApplySyncCommand), nameof(InstallFromZipCommand), nameof(TakeOverCommand), nameof(TakeOverAllCommand), nameof(RemoveFromSmmProfilesCommand),
-        nameof(UpdateAllCommand), nameof(HandBackCommand), nameof(HandBackAllCommand), nameof(InstallDependenciesCommand))]
+        nameof(UpdateAllCommand), nameof(HandBackCommand), nameof(HandBackAllCommand), nameof(InstallDependenciesCommand), nameof(ApplyActiveModpackCommand))]
     private bool _isBusy;
 
     /// <summary>Bound to the install pickers so the selection can't change mid-operation.</summary>
@@ -189,12 +189,134 @@ public sealed partial class MainViewModel : ObservableObject
 
     // ---- mod list view: search, filter, selection ---------------------------------------------------------
 
-    public static IReadOnlyList<string> FilterOptions { get; } =
+    /// <summary>One-click filter sets at the top of the Filters dropdown (the filters the list started with).</summary>
+    public static IReadOnlyList<string> FilterPresets { get; } =
         ["All mods", "Installed here", "Updates available", "Not installed", "Managed elsewhere", "Has problems"];
 
+    public static IReadOnlyList<string> StatusOptions { get; } = ["Any", "Installed here", "Not installed"];
+    public static IReadOnlyList<string> SortOptions { get; } = ["Name", "Needs attention first", "Installed first", "Newest release first"];
+
     [ObservableProperty] private string _searchText = "";
-    [ObservableProperty] private string _selectedFilter = "All mods";
     [ObservableProperty] private ModRow? _selectedMod;
+
+    // Filters: within a group any ticked option matches; the groups (and the toggles) must all match.
+    [ObservableProperty] private string _statusFilter = "Any";
+    [ObservableProperty] private bool _fromGitHub;
+    [ObservableProperty] private bool _fromZip;
+    [ObservableProperty] private bool _fromSmr;
+    [ObservableProperty] private bool _bySdmm;
+    [ObservableProperty] private bool _bySmm;
+    [ObservableProperty] private bool _byOther;
+    [ObservableProperty] private bool _onlyUpdates;
+    [ObservableProperty] private bool _onlyProblems;
+    [ObservableProperty] private string _sortBy = "Name";
+    [ObservableProperty] private bool _isFilterMenuOpen;
+
+    private static readonly HashSet<string> FilterProperties =
+    [
+        nameof(SearchText), nameof(StatusFilter), nameof(FromGitHub), nameof(FromZip), nameof(FromSmr), nameof(BySdmm),
+        nameof(BySmm), nameof(ByOther), nameof(OnlyUpdates), nameof(OnlyProblems), nameof(SortBy),
+    ];
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName is { } p && FilterProperties.Contains(p)) FiltersChanged();
+    }
+
+    private void FiltersChanged()
+    {
+        if (ModsView is System.Windows.Data.ListCollectionView lcv) lcv.CustomSort = new ModRowOrder(SortBy);
+        ModsView.Refresh();
+        OnPropertyChanged(nameof(ModCountText)); OnPropertyChanged(nameof(NoMatchText));
+        OnPropertyChanged(nameof(ActiveFilters)); OnPropertyChanged(nameof(HasActiveFilters)); OnPropertyChanged(nameof(FilterButtonText));
+    }
+
+    /// <summary>A filter in effect, shown as a removable chip under the search box.</summary>
+    public sealed record FilterChip(string Label, string Key);
+
+    public IReadOnlyList<FilterChip> ActiveFilters
+    {
+        get
+        {
+            var chips = new List<FilterChip>();
+            if (StatusFilter != "Any") chips.Add(new(StatusFilter, nameof(StatusFilter)));
+            if (FromGitHub) chips.Add(new("From GitHub", nameof(FromGitHub)));
+            if (FromZip) chips.Add(new("From imported zips", nameof(FromZip)));
+            if (FromSmr && Brand.Current.IsVariant) chips.Add(new("On SMR", nameof(FromSmr)));
+            if (BySdmm) chips.Add(new("Installed by SDMM", nameof(BySdmm)));
+            if (BySmm) chips.Add(new("Installed by SMM", nameof(BySmm)));
+            if (ByOther) chips.Add(new("Installed by the host or by hand", nameof(ByOther)));
+            if (OnlyUpdates) chips.Add(new("Updates available", nameof(OnlyUpdates)));
+            if (OnlyProblems) chips.Add(new("Has problems", nameof(OnlyProblems)));
+            if (SortBy != "Name") chips.Add(new("Sorted: " + SortBy.ToLowerInvariant(), nameof(SortBy)));
+            return chips;
+        }
+    }
+
+    public bool HasActiveFilters => ActiveFilters.Count > 0;
+
+    public string FilterButtonText => ActiveFilters.Count(c => c.Key != nameof(SortBy)) is var n and > 0 ? $"Filters ({n})" : "Filters";
+
+    [RelayCommand]
+    private void RemoveFilter(string? key)
+    {
+        switch (key)
+        {
+            case nameof(StatusFilter): StatusFilter = "Any"; break;
+            case nameof(FromGitHub): FromGitHub = false; break;
+            case nameof(FromZip): FromZip = false; break;
+            case nameof(FromSmr): FromSmr = false; break;
+            case nameof(BySdmm): BySdmm = false; break;
+            case nameof(BySmm): BySmm = false; break;
+            case nameof(ByOther): ByOther = false; break;
+            case nameof(OnlyUpdates): OnlyUpdates = false; break;
+            case nameof(OnlyProblems): OnlyProblems = false; break;
+            case nameof(SortBy): SortBy = "Name"; break;
+        }
+    }
+
+    /// <summary>Clears the filters (not the search or the sort).</summary>
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        StatusFilter = "Any";
+        FromGitHub = FromZip = FromSmr = BySdmm = BySmm = ByOther = OnlyUpdates = OnlyProblems = false;
+    }
+
+    [RelayCommand]
+    private void ApplyPreset(string? preset)
+    {
+        ClearFilters();
+        switch (preset)
+        {
+            case "Installed here": StatusFilter = "Installed here"; break;
+            case "Not installed": StatusFilter = "Not installed"; break;
+            case "Updates available": OnlyUpdates = true; break;
+            case "Managed elsewhere": BySmm = ByOther = true; break;
+            case "Has problems": OnlyProblems = true; break;
+        }
+        IsFilterMenuOpen = false;
+    }
+
+    /// <summary>The list's sort orders (ties go by name).</summary>
+    private sealed class ModRowOrder(string sortBy) : System.Collections.IComparer
+    {
+        public int Compare(object? x, object? y)
+        {
+            if (x is not ModRow a || y is not ModRow b) return 0;
+            int c = sortBy switch
+            {
+                "Needs attention first" => Rank(a).CompareTo(Rank(b)),
+                "Installed first" => (a.Installed is null).CompareTo(b.Installed is null),
+                "Newest release first" => Nullable.Compare(b.NewestReleaseDate, a.NewestReleaseDate),
+                _ => 0,
+            };
+            return c != 0 ? c : StringComparer.OrdinalIgnoreCase.Compare(a.DisplayName, b.DisplayName);
+        }
+
+        private static int Rank(ModRow r) => r.HasProblems ? 0 : r.State == ModState.UpdateAvailable ? 1 : r.Installed is not null ? 2 : 3;
+    }
     [ObservableProperty] private string _lastLogLine = "";
     [ObservableProperty] private bool _isLogOpen;
 
@@ -209,6 +331,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 _modsView = System.Windows.Data.CollectionViewSource.GetDefaultView(Mods);
                 _modsView.Filter = o => o is ModRow r && MatchesFilter(r);
+                if (_modsView is System.Windows.Data.ListCollectionView lcv) lcv.CustomSort = new ModRowOrder(SortBy);
             }
             return _modsView;
         }
@@ -231,7 +354,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (Mods.Count == 0 || Mods.Any(MatchesFilter)) return "";
             var why = new List<string>();
             if (SearchText.Trim().Length > 0) why.Add($"the search \"{SearchText.Trim()}\"");
-            if (SelectedFilter != "All mods") why.Add($"the filter \"{SelectedFilter}\"");
+            if (ActiveFilters.Any(c => c.Key != nameof(SortBy))) why.Add("the filters");
             return $"No mods match {string.Join(" and ", why)}.";
         }
     }
@@ -240,38 +363,30 @@ public sealed partial class MainViewModel : ObservableObject
     private void ClearSearch()
     {
         SearchText = "";
-        SelectedFilter = "All mods";
+        ClearFilters();
     }
 
     private bool MatchesFilter(ModRow r)
     {
         var q = SearchText.Trim();
+        // The list shows SMR's name where there is one, so search that too (and the authors).
         if (q.Length > 0 &&
             !r.ModReference.Contains(q, StringComparison.OrdinalIgnoreCase) &&
+            !r.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) &&
             !r.Source.Contains(q, StringComparison.OrdinalIgnoreCase) &&
-            !r.Description.Contains(q, StringComparison.OrdinalIgnoreCase))
+            !r.Description.Contains(q, StringComparison.OrdinalIgnoreCase) &&
+            !r.SmrAuthorsText.Contains(q, StringComparison.OrdinalIgnoreCase))
             return false;
-        return SelectedFilter switch
-        {
-            "Installed here" => r.Installed is not null,
-            "Updates available" => r.State == ModState.UpdateAvailable,
-            "Not installed" => r.Installed is null,
-            "Managed elsewhere" => r.IsManagedElsewhere,
-            "Has problems" => r.HasProblems,
-            _ => true,
-        };
-    }
-
-    partial void OnSearchTextChanged(string value)
-    {
-        ModsView.Refresh();
-        OnPropertyChanged(nameof(ModCountText)); OnPropertyChanged(nameof(NoMatchText));
-    }
-
-    partial void OnSelectedFilterChanged(string value)
-    {
-        ModsView.Refresh();
-        OnPropertyChanged(nameof(ModCountText)); OnPropertyChanged(nameof(NoMatchText));
+        if (StatusFilter == "Installed here" && r.Installed is null) return false;
+        if (StatusFilter == "Not installed" && r.Installed is not null) return false;
+        bool smr = FromSmr && Brand.Current.IsVariant;
+        if ((FromGitHub || FromZip || smr) && !(FromGitHub && r.FromGitHub || FromZip && r.FromZip || smr && r.HasSmr)) return false;
+        if ((BySdmm || BySmm || ByOther) &&
+            !(BySdmm && r.Installed?.Owner == ModOwner.Sdmm || BySmm && r.Installed?.Owner == ModOwner.Smm || ByOther && r.Installed?.Owner == ModOwner.Unmanaged))
+            return false;
+        if (OnlyUpdates && r.State != ModState.UpdateAvailable) return false;
+        if (OnlyProblems && !r.HasProblems) return false;
+        return true;
     }
 
     [RelayCommand]
@@ -826,6 +941,7 @@ public sealed partial class MainViewModel : ObservableObject
         BrowseSmrCommand.NotifyCanExecuteChanged();
         // Only the listed mods' dependencies: the normal mode doesn't list (or fix up) other tools' mods.
         _unmet = DependencyFixer.FindUnmet(installed, Mods.Select(r => r.ModReference));
+        UpdateModpackState(item, installed);
         UpdateDependencyBanner();
     }
 
@@ -854,6 +970,7 @@ public sealed partial class MainViewModel : ObservableObject
         List<string> refs;
         lock (_changed) { refs = _changed.ToList(); _changed.Clear(); }
         if (item is null) return;
+        NoteForModpack(item, refs);
         if (item != SelectedInstall)
         {
             if (_scan?.Item == item) _scan = null; // read it fresh when it's picked again
@@ -1284,7 +1401,7 @@ public sealed partial class MainViewModel : ObservableObject
                 await RunBusy($"Downloading SDMM {update.Tag}…", async () =>
                 {
                     using var gh = CreateGitHub();
-                    await AppUpdater.ApplyAsync(gh, AppInfo.UpdateSource, update);
+                    if (await AppUpdater.ApplyAsync(gh, AppInfo.UpdateSource, update) is { } cliNote) Log(cliNote);
                     Log($"Updated to {update.Tag}; restarting.");
                     ClosingForUpdate = true; // the new copy is already starting; don't ask whether to close
                     Application.Current.Shutdown();
@@ -1441,6 +1558,32 @@ public sealed partial class MainViewModel : ObservableObject
         var plan = await Task.Run(() => new InstallPlanner().Plan(opened.Install, requests, item.IsRemote ? null : _smm, installed));
         foreach (var w in plan.Issues.Where(i => i.Level == IssueLevel.Warning)) Log($"Note: {w.Message}");
 
+        // With SMR installs available, a mod SMM installed or lists in a profile isn't a dead end: SDMM takes it over,
+        // asked as part of the install. Mods SMM installed are taken over first (the install needs that); profiles are
+        // edited after installing, so a mod is never left unmanaged.
+        IReadOnlyList<string> leaveSmm = [];
+        IReadOnlyList<string> leaveProfiles = [];
+        if (plan.IsBlocked && Brand.Current.IsVariant &&
+            plan.Issues.Where(i => i.Level == IssueLevel.Blocked).All(i => i.Code is "SMM_PROFILE" or "SMM_OWNED" or "UNMANAGED_FOLDER"))
+        {
+            leaveSmm = plan.Issues.Where(i => i.Code is "SMM_PROFILE" or "SMM_OWNED").Select(i => i.ModReference!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var owned = plan.Issues.Where(i => i.Code is "SMM_OWNED" or "UNMANAGED_FOLDER").Select(i => i.ModReference!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (await ConfirmTakeOverFromSmmAsync(item, opened, leaveSmm, owned) is not { } profiles)
+            {
+                Log("Install cancelled.");
+                return false;
+            }
+            leaveProfiles = profiles;
+            if (owned.Count > 0)
+            {
+                var adopted = await AdoptAsync(item, owned);
+                if (adopted.Count < owned.Count) return false; // AdoptAsync explained why
+                installed = null; // read again: the taken-over folders now carry SDMM's marker
+            }
+            // The SMM conflicts were just dealt with; every other check still runs.
+            plan = await Task.Run(() => new InstallPlanner().Plan(opened.Install, requests, null, installed));
+        }
+
         if (plan.IsBlocked)
         {
             var reasons = plan.Issues.Where(i => i.Level == IssueLevel.Blocked).Select(i => "• " + i.Message).Distinct();
@@ -1480,6 +1623,13 @@ public sealed partial class MainViewModel : ObservableObject
             throw new Sdmm.Remote.RemoteRefusedException(lockError, ex);
         }
         Log($"Done: installed {result.Installed.Count}, already up to date {result.Skipped.Count}.");
+        if (leaveSmm.Count > 0)
+        {
+            // Now that SDMM's copies are in place, take them out of SMM's profiles (and lockfiles here).
+            var held = await RemoveFromSmmProfilesAsync(item, leaveSmm, leaveProfiles);
+            foreach (var (mod, neededBy) in held)
+                Log($"{mod} is still needed by {string.Join(", ", neededBy)} in your SMM profile; SMM will put its copy back on its next apply.");
+        }
         var freed = await Task.Run(() => cache.Prune(KeepBuildsPerAsset));
         if (freed > 0) Log($"Download cache: removed older builds ({freed / 1048576.0:0.0} MB freed; they can be downloaded again).");
         UpdateCacheSize();
@@ -1510,6 +1660,7 @@ public sealed partial class MainViewModel : ObservableObject
             if (!EnsureServerWritable(item, opened.Install)) return false;
             MarkChanged([row.ModReference]);
             new Installer(Log).Uninstall(opened.Install, row.ModReference);
+            NoteForModpack(item, [row.ModReference], removed: true);
             return true;
         });
         if (!removed) return;
@@ -2176,7 +2327,196 @@ public sealed partial class MainViewModel : ObservableObject
     private void OpenModpacks() => ModpacksRequested?.Invoke();
 
     public IList<Sdmm.Core.Modpacks.Modpack> Modpacks => _config.Modpacks;
-    public void SaveModpacks() => SaveConfig();
+
+    /// <summary>Saves the modpacks; the Modpacks window calls this after edits, so the main window's picker follows.</summary>
+    public void SaveModpacks()
+    {
+        // A deleted pack can't be followed any more.
+        foreach (var i in Installs.Where(i => i.Config.ActiveModpack is { } n && !_config.Modpacks.Any(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase))))
+            i.Config.ActiveModpack = null;
+        SaveConfig();
+        OnPropertyChanged(nameof(ActiveModpackChoices));
+        RefreshModpackState();
+    }
+
+    /// <summary>A modpack was renamed: games and servers following it keep following it.</summary>
+    public void ModpackRenamed(string oldName, string newName)
+    {
+        foreach (var i in Installs.Where(i => string.Equals(i.Config.ActiveModpack, oldName, StringComparison.OrdinalIgnoreCase)))
+            i.Config.ActiveModpack = newName;
+    }
+
+    // ---- the active modpack ---------------------------------------------------------------------------------------
+    //
+    // Like SMM's selected profile: each game or server can follow one modpack. Installs, updates and removals made in
+    // SDMM update it; differences that came from elsewhere (SMM, the host, by hand) are pointed out with a choice to
+    // update the pack or apply it, never changed silently.
+
+    public const string NoModpack = "(none)";
+
+    public IReadOnlyList<string> ActiveModpackChoices => [NoModpack, .. _config.Modpacks.Select(p => p.Name)];
+
+    public Sdmm.Core.Modpacks.Modpack? ActivePackFor(InstallItem? item) =>
+        item?.Config.ActiveModpack is { } n ? _config.Modpacks.FirstOrDefault(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) : null;
+
+    /// <summary>The picker's value; picking a pack asks whether to apply it now or just follow it.</summary>
+    public string ActiveModpackChoice
+    {
+        get => ActivePackFor(SelectedInstall)?.Name ?? NoModpack;
+        set
+        {
+            if (value == ActiveModpackChoice) return;
+            // After the binding has finished: the question is a modal dialog, and putting the picker back on Cancel
+            // only works once the picker's own update is over.
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => _ = ChangeActiveModpackAsync(value));
+        }
+    }
+
+    /// <summary>Mods SDMM changed per install, to bring into its active pack when the install is next listed.</summary>
+    private readonly Dictionary<string, (HashSet<string> Mods, HashSet<string> Removed)> _modpackPending = [];
+
+    private void NoteForModpack(InstallItem item, IEnumerable<string> mods, bool removed = false)
+    {
+        if (ActivePackFor(item) is null) return;
+        lock (_modpackPending)
+        {
+            if (!_modpackPending.TryGetValue(item.Config.Key, out var p))
+                _modpackPending[item.Config.Key] = p = (new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+            foreach (var m in mods)
+            {
+                p.Mods.Add(m);
+                if (removed) p.Removed.Add(m);
+            }
+        }
+    }
+
+    private void SetActiveModpack(InstallItem item, Sdmm.Core.Modpacks.Modpack? pack)
+    {
+        item.Config.ActiveModpack = pack?.Name;
+        lock (_modpackPending) _modpackPending.Remove(item.Config.Key);
+        SaveConfig();
+        if (item == SelectedInstall) RefreshModpackState();
+    }
+
+    private async Task ChangeActiveModpackAsync(string choice)
+    {
+        var item = SelectedInstall;
+        var pack = _config.Modpacks.FirstOrDefault(p => p.Name == choice);
+        if (item is null || IsBusy)
+        {
+            RevertModpackChoice();
+            return;
+        }
+        if (pack is null)
+        {
+            SetActiveModpack(item, null);
+            Log($"{item.Name} no longer follows a modpack.");
+            return;
+        }
+        var pick = _dialogs.Choose($"Use '{pack.Name}' for '{item.Name}'",
+            $"'{item.Name}' will follow the modpack '{pack.Name}': mods you install, update or remove here in SDMM update the modpack too.",
+            [
+                ("Apply it now", "Install, update and remove mods so this game or server matches the modpack. Shows every change first."),
+                ("Just follow it", "Leave the mods as they are. Any differences are pointed out, with a choice to update the modpack or apply it."),
+            ]);
+        if (pick is null)
+        {
+            RevertModpackChoice();
+            return;
+        }
+        if (pick == 1)
+        {
+            SetActiveModpack(item, pack);
+            Log($"{item.Name} now follows the modpack '{pack.Name}'.");
+            return;
+        }
+        // Applying makes it the active pack when it goes through; if it's cancelled, nothing changes.
+        await ApplyModpackAsync(pack, removeOthers: true, useNewest: false);
+        RevertModpackChoice();
+    }
+
+    /// <summary>Puts the picker back to the actual active pack (after a cancel), once the current change has finished.</summary>
+    private void RevertModpackChoice() =>
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(ActiveModpackChoice)));
+
+    [ObservableProperty] private string _modpackMismatchText = "";
+    [ObservableProperty] private string _modpackMismatchDetail = "";
+    private string? _hiddenMismatch;
+
+    private void RefreshModpackState()
+    {
+        if (_scan is { } s && s.Item == SelectedInstall) UpdateModpackState(s.Item, s.Read.Mods);
+        else
+        {
+            ModpackMismatchText = ModpackMismatchDetail = "";
+            OnPropertyChanged(nameof(ActiveModpackChoice));
+        }
+    }
+
+    /// <summary>Brings SDMM's own changes into the active pack, then compares the pack with what's installed.</summary>
+    private void UpdateModpackState(InstallItem item, IReadOnlyList<InstalledMod> installed)
+    {
+        OnPropertyChanged(nameof(ActiveModpackChoice));
+        var pack = ActivePackFor(item);
+        if (pack is null)
+        {
+            ModpackMismatchText = ModpackMismatchDetail = "";
+            return;
+        }
+        (HashSet<string> Mods, HashSet<string> Removed) pending;
+        bool has;
+        lock (_modpackPending) has = _modpackPending.Remove(item.Config.Key, out pending);
+        if (has && Sdmm.Core.Modpacks.ModpackIO.Follow(pack, installed, item.IsServer, SmrSourcePrefix, pending.Mods, pending.Removed, DateTimeOffset.UtcNow))
+        {
+            Log($"Modpack '{pack.Name}' updated with the changes made to {item.Name}.");
+            SaveConfig();
+        }
+        var (missing, extra) = Sdmm.Core.Modpacks.ModpackIO.Compare(pack, installed, item.IsServer);
+        var signature = $"{item.Config.Key}|{pack.Name}|{string.Join(",", missing)}|{string.Join(",", extra)}";
+        if (missing.Count + extra.Count == 0 || signature == _hiddenMismatch)
+        {
+            ModpackMismatchText = ModpackMismatchDetail = "";
+            return;
+        }
+        static string Some(IReadOnlyList<string> mods) => string.Join(", ", mods.Take(4)) + (mods.Count > 4 ? $" and {mods.Count - 4} more" : "");
+        var parts = new List<string>();
+        if (missing.Count > 0) parts.Add($"{missing.Count} from the modpack aren't installed here or are another version ({Some(missing)})");
+        if (extra.Count > 0) parts.Add($"{extra.Count} installed here aren't in it ({Some(extra)})");
+        ModpackMismatchText = $"'{item.Name}' doesn't match its modpack '{pack.Name}': {string.Join("; ", parts)}.";
+        ModpackMismatchDetail = (missing.Count > 0 ? "Not installed or another version:\n" + string.Join("\n", missing.Select(m => "• " + m)) : "") +
+                                (missing.Count > 0 && extra.Count > 0 ? "\n\n" : "") +
+                                (extra.Count > 0 ? "Installed but not in the modpack:\n" + string.Join("\n", extra.Select(m => "• " + m)) : "");
+        _currentMismatch = signature;
+    }
+
+    private string? _currentMismatch;
+
+    /// <summary>Makes the active pack match what's installed here (keeps sides you picked, and mods for the other side).</summary>
+    [RelayCommand]
+    private void UpdateActiveModpack()
+    {
+        var item = SelectedInstall;
+        if (ActivePackFor(item) is not { } pack || _scan is not { } s || s.Item != item) return;
+        if (Sdmm.Core.Modpacks.ModpackIO.Follow(pack, s.Read.Mods, item!.IsServer, SmrSourcePrefix, null, null, DateTimeOffset.UtcNow))
+        {
+            Log($"Modpack '{pack.Name}' updated to match {item.Name}.");
+            SaveConfig();
+        }
+        UpdateModpackState(item, s.Read.Mods);
+    }
+
+    /// <summary>Applies the active pack here (shows every change first).</summary>
+    [RelayCommand(CanExecute = nameof(CanRefresh))]
+    private Task ApplyActiveModpackAsync() =>
+        ActivePackFor(SelectedInstall) is { } pack ? ApplyModpackAsync(pack, removeOthers: true, useNewest: false) : Task.CompletedTask;
+
+    /// <summary>Hides the banner until the differences change.</summary>
+    [RelayCommand]
+    private void HideModpackMismatch()
+    {
+        _hiddenMismatch = _currentMismatch;
+        ModpackMismatchText = ModpackMismatchDetail = "";
+    }
     public SmmState SmmSettings => _smm = SmmState.Load(_config.SmmDirectory);
 
     /// <summary>Captures the selected install as a modpack (every readable mod, with its version and side).</summary>
@@ -2321,6 +2661,7 @@ public sealed partial class MainViewModel : ObservableObject
             _quietInstallResults = false;
         }
         Log($"Applied modpack '{pack.Name}' to {item.Name}: {installRequests.Count} installed or changed, {remove.Count} removed, {skipped.Count} skipped.");
+        SetActiveModpack(item, pack);
         if (item.IsServer && installRequests.Count + remove.Count > 0)
             _dialogs.Info("Modpack applied", $"Applied '{pack.Name}' to the server '{item.Name}'.\n\n" +
                 (item.IsRemote ? "Start (or restart) it from your host's panel so it loads the changes." : "Restart it so it loads the changes."));
@@ -2622,8 +2963,11 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // Only the lockfile has it: it's a dependency of something, or a leftover from before.
             var lockOnly = await RemoveFromSmmProfilesAsync(SelectedInstall!, [row.ModReference], []);
-            await BuildRowsAsync(reuseScan: true); // only SMM's files changed; SMM-replace warnings are re-checked below
-            ReportStillHeldBySmm(lockOnly);
+            // Re-check its "SMM will replace it" warning against the edited lockfile (the last read still has it).
+            MarkChanged([row.ModReference]);
+            await RefreshAfterChangeAsync();
+            if (lockOnly.Count > 0) ReportStillHeldBySmm(lockOnly);
+            else Log($"{row.ModReference}: cleared from SMM's lockfile; SMM no longer replaces it.");
             return;
         }
         if (!_dialogs.Confirm("Remove from SMM profiles",
@@ -2949,6 +3293,46 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>A mod another mod in the profile depends on comes back with that mod; that can't be fixed here, so say so.</summary>
+    /// <summary>
+    /// Installing over mods SMM installed (<paramref name="owned"/>) or that its profiles for this game list: says what
+    /// is taken over, which profiles they'll be taken out of, and which mods SMM would still put back as another mod's
+    /// dependency; checks SMM is closed. Returns the profiles to edit after installing, or null if cancelled or SMM is
+    /// running.
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> ConfirmTakeOverFromSmmAsync(InstallItem item, OpenedInstall opened, IReadOnlyList<string> mods,
+        IReadOnlyList<string> owned)
+    {
+        _smm = SmmState.Load(_config.SmmDirectory);
+        var smm = _smm;
+        var profiles = mods.SelectMany(r => SmmProfileEditor.ProfilesListing(smm, r)).Distinct().ToList();
+        if (profiles.Count > 0 && SmmProfileEditor.FindRunningSmm() is { Count: > 0 } running)
+        {
+            _dialogs.Error("Close SMM first",
+                $"{string.Join(", ", mods)} {(mods.Count == 1 ? "is" : "are")} in your SMM profiles ({string.Join(", ", profiles)}), and SMM is running ({string.Join(", ", running)}). " +
+                "SMM keeps its profiles in memory and would undo the change.\n\nClose SMM, then try again. Nothing was changed.");
+            return null;
+        }
+        var held = await Task.Run(() =>
+        {
+            var installed = ModScanner.Scan(opened.Install.FileSystem);
+            var attached = smm.FindInstallations(item.Config.Path).Select(i => i.Profile).Distinct().ToList();
+            return mods.Select(r => (Mod: r, NeededBy: SmmProfileEditor.RequiredBy(smm, attached, installed, r))).Where(h => h.NeededBy.Count > 0).ToList();
+        });
+        string it = mods.Count == 1 ? "it" : "them";
+        var text = new System.Text.StringBuilder();
+        if (owned.Count > 0)
+            text.Append($"{string.Join(", ", owned)} {(owned.Count == 1 ? "was" : "were")} installed by SMM{(item.IsServer ? ", the host" : "")} or by hand. SDMM takes {(owned.Count == 1 ? "it" : "them")} over first, then installs.\n\n");
+        if (mods.Count > 0)
+            text.Append($"{string.Join(", ", mods)} {(mods.Count == 1 ? "is" : "are")} in SMM's hands for '{item.Name}'. ");
+        if (mods.Count > 0) text.Append(profiles.Count > 0
+            ? $"After installing, SDMM manages {it} and takes {it} out of your SMM profiles ({string.Join(", ", profiles)}; profiles.json is backed up), so SMM doesn't put its own copy back."
+            : $"After installing, SDMM manages {it} and clears {it} from SMM's lockfile here.");
+        if (held.Count > 0)
+            text.Append("\n\n" + string.Join("\n", held.Select(h => $"• {h.Mod} is also required by {string.Join(", ", h.NeededBy)} in your SMM profile, so SMM will put its copy back on its next apply unless you remove that too.")));
+        text.Append("\n\nContinue?");
+        return _dialogs.Confirm("Take over from SMM", text.ToString()) ? profiles : null;
+    }
+
     private void ReportStillHeldBySmm(IReadOnlyList<(string Mod, IReadOnlyList<string> NeededBy)> held)
     {
         if (held.Count == 0) return;
