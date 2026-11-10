@@ -63,6 +63,19 @@ public sealed class FileLogTests : IDisposable
     }
 
     [Fact]
+    public void WindowsUserFoldersAreAlwaysHidden()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var own = FileLog.Redact($"settings {profile}\\AppData\\Local\\x.json and {profile.Replace('\\', '/')}/y");
+        Assert.Equal("settings %USERPROFILE%\\AppData\\Local\\x.json and %USERPROFILE%/y", own);
+
+        Assert.Equal(@"copied D:\Users\<user>\Downloads\a.zip", FileLog.Redact(@"copied D:\Users\alice\Downloads\a.zip"));
+        Assert.Equal(@"{""p"": ""C:\\Users\\<user>\\x""}", FileLog.Redact(@"{""p"": ""C:\\Users\\bob\\x""}"));
+        Assert.Equal(@"M:\Satismod\Mods\SML", FileLog.Redact(@"M:\Satismod\Mods\SML")); // not a user folder
+        Assert.Equal(@"C:\Users\<user>", FileLog.Redact(@"C:\Users\<user>"));             // already hidden
+    }
+
+    [Fact]
     public void StaysUnderTheLimitAndDropsTheOldestLinesFirst()
     {
         FileLog.Configure(_tmp.Path, detailed: true);

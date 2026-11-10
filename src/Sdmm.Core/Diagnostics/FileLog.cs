@@ -13,9 +13,10 @@ namespace Sdmm.Core.Diagnostics;
 /// web requests, programs it starts) plus errors and crashes. At most <see cref="MaxBytes"/>.</item>
 /// </list>
 /// When a write takes a file over its limit, the oldest lines are dropped (first in, first out) so it shrinks to about
-/// four fifths of the limit. Tokens and passwords are never written, and server login names are replaced with
-/// "&lt;login&gt;" unless <see cref="ShowLoginNames"/> is set (Settings → Security). Everything is best effort: a log that
-/// can't be written never stops what SDMM is doing.
+/// four fifths of the limit. Tokens and passwords are never written. Server login names are replaced with
+/// "&lt;login&gt;" unless <see cref="ShowLoginNames"/> is set (Settings → Security), and Windows user folders always are
+/// (yours becomes %USERPROFILE%, anyone else's X:\Users\&lt;user&gt;), since the folder name is usually a person's name.
+/// Everything is best effort: a log that can't be written never stops what SDMM is doing.
 /// </summary>
 public static class FileLog
 {
@@ -42,8 +43,30 @@ public static class FileLog
     // The login in a server address such as sftp://alice@host:22/path (also ftp:// and ftps://).
     private static readonly Regex LoginInAddress = new(@"\b((?:sftp|ftps?)://)[^@\s/]+@", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    /// <summary>The text as it's written to the logs: login names in server addresses hidden unless <see cref="ShowLoginNames"/>.</summary>
-    public static string Redact(string text) => _showLoginNames ? text : LoginInAddress.Replace(text, "$1<login>@");
+    // This Windows account's folder (C:\Users\<name>), matched with either kind of slash, doubled ones too (JSON).
+    private static readonly Regex? OwnProfile = ProfilePattern(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    // Any other user folder: a drive, then Users, then the folder name.
+    private static readonly Regex AnyProfile = new(@"\b([A-Za-z]:[\\/]+Users[\\/]+)(?!<user>)[^\\/\s""'<>|:*?]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static Regex? ProfilePattern(string profile)
+    {
+        if (string.IsNullOrEmpty(profile)) return null;
+        var parts = profile.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).Select(Regex.Escape);
+        // Whole folder names only: C:\Users\Al must not eat the start of C:\Users\Alice.
+        return new Regex(string.Join(@"[\\/]+", parts) + @"(?![^\\/\s""'<>|:*?])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>
+    /// The text as it's written to the logs: Windows user folders hidden, and login names in server addresses hidden
+    /// unless <see cref="ShowLoginNames"/>.
+    /// </summary>
+    public static string Redact(string text)
+    {
+        if (OwnProfile is not null) text = OwnProfile.Replace(text, "%USERPROFILE%");
+        text = AnyProfile.Replace(text, "$1<user>");
+        return _showLoginNames ? text : LoginInAddress.Replace(text, "$1<login>@");
+    }
 
     /// <summary>Whether the detailed log is on. Cheap to check before building a message.</summary>
     public static bool Enabled => _enabled;
