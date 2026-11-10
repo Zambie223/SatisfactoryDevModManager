@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Sdmm.Core.Diagnostics;
 
@@ -12,8 +13,9 @@ namespace Sdmm.Core.Diagnostics;
 /// web requests, programs it starts) plus errors and crashes. At most <see cref="MaxBytes"/>.</item>
 /// </list>
 /// When a write takes a file over its limit, the oldest lines are dropped (first in, first out) so it shrinks to about
-/// four fifths of the limit. Tokens and passwords are never written. Everything is best effort: a log that can't be
-/// written never stops what SDMM is doing.
+/// four fifths of the limit. Tokens and passwords are never written, and server login names are replaced with
+/// "&lt;login&gt;" unless <see cref="ShowLoginNames"/> is set (Settings → Security). Everything is best effort: a log that
+/// can't be written never stops what SDMM is doing.
 /// </summary>
 public static class FileLog
 {
@@ -27,6 +29,21 @@ public static class FileLog
     private static RollingFile? _crash;
     private static volatile bool _enabled;
     private static string _version = "";
+
+    private static volatile bool _showLoginNames;
+
+    /// <summary>Write server login names as they are, instead of "&lt;login&gt;". Off by default, so logs can be shared.</summary>
+    public static bool ShowLoginNames
+    {
+        get => _showLoginNames;
+        set => _showLoginNames = value;
+    }
+
+    // The login in a server address such as sftp://alice@host:22/path (also ftp:// and ftps://).
+    private static readonly Regex LoginInAddress = new(@"\b((?:sftp|ftps?)://)[^@\s/]+@", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>The text as it's written to the logs: login names in server addresses hidden unless <see cref="ShowLoginNames"/>.</summary>
+    public static string Redact(string text) => _showLoginNames ? text : LoginInAddress.Replace(text, "$1<login>@");
 
     /// <summary>Whether the detailed log is on. Cheap to check before building a message.</summary>
     public static bool Enabled => _enabled;
@@ -63,6 +80,7 @@ public static class FileLog
     public static void Write(string area, string message)
     {
         if (!_enabled) return;
+        message = Redact(message);
         lock (Gate) _detail?.Write(area, message);
     }
 
@@ -72,7 +90,7 @@ public static class FileLog
     /// <summary>A crash: always written to crash.log (with the version and Windows build), and to the detailed log too when that's on.</summary>
     public static void WriteCrash(string context, Exception ex)
     {
-        var entry = $"{context} (SDMM {(_version.Length > 0 ? _version : "?")}, {Environment.OSVersion}): {ex}";
+        var entry = Redact($"{context} (SDMM {(_version.Length > 0 ? _version : "?")}, {Environment.OSVersion}): {ex}");
         lock (Gate)
         {
             _crash?.Write("crash", entry);

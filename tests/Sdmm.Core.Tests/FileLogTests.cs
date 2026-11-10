@@ -35,6 +35,34 @@ public sealed class FileLogTests : IDisposable
     }
 
     [Fact]
+    public void ServerLoginNamesAreHiddenUnlessAskedFor()
+    {
+        try
+        {
+            FileLog.ShowLoginNames = false;
+            FileLog.Configure(_tmp.Path, detailed: true);
+            FileLog.Write("fs", "write sftp://alice@host.example:22/FactoryGame/Mods/x and FTPS://bob@h/ and ftp://carol@h:21/y");
+            FileLog.WriteCrash("Boom", new IOException("can't reach sftp://dave@host/"));
+            FileLog.ShowLoginNames = true;
+            FileLog.Write("fs", "write sftp://erin@host/z");
+            FileLog.Close();
+
+            var log = File.ReadAllText(_tmp.Combine(FileLog.FileName));
+            var crash = File.ReadAllText(_tmp.Combine(FileLog.CrashFileName));
+            Assert.Contains("sftp://<login>@host.example:22/FactoryGame/Mods/x", log);
+            Assert.Contains("FTPS://<login>@h/", log);
+            Assert.Contains("ftp://<login>@h:21/y", log);
+            foreach (var name in new[] { "alice", "bob", "carol", "dave" }) Assert.DoesNotContain(name, log + crash);
+            Assert.Contains("sftp://<login>@host/", crash);
+            Assert.Contains("sftp://erin@host/z", log); // shown once switched on
+        }
+        finally
+        {
+            FileLog.ShowLoginNames = false;
+        }
+    }
+
+    [Fact]
     public void StaysUnderTheLimitAndDropsTheOldestLinesFirst()
     {
         FileLog.Configure(_tmp.Path, detailed: true);

@@ -2,6 +2,15 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## Unreleased
+
+### Added
+- **Settings → Security → Show server login names in log files** (off by default).
+
+### Changed
+- Installing and updating on a hosted (SFTP/FTP) server is much faster: SDMM plans from the list of mods it has just read instead of reading every mod on the server again, and listing a folder over SFTP takes one request fewer. With the detailed log on, each full read of an install is logged with how long it took.
+- The log files no longer contain server login names: a server's address is written as `sftp://<login>@host`, so logs can be shared in a bug report.
+
 ## 0.4.0 (2026-11-10)
 
 ### Added

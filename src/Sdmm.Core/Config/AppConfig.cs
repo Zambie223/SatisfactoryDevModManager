@@ -99,6 +99,8 @@ public sealed class AppConfig
     public string? ProtectedVirusTotalKey { get; set; }
     /// <summary>Write the detailed log (sdmm.log next to this file). Off by default; crash.log is written regardless.</summary>
     public bool VerboseLogging { get; set; }
+    /// <summary>Write server login names in the log files. Off by default: they're replaced with "&lt;login&gt;" so logs can be shared.</summary>
+    public bool LogLoginNames { get; set; }
     /// <summary>Branding variant (see Brand in the app).</summary>
     public bool Variant { get; set; }
 

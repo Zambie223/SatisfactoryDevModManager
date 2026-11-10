@@ -104,6 +104,7 @@ public static class Program
             if (e.ExceptionObject is Exception ex) FileLog.WriteCrash("Unhandled error in the command line tool", ex);
         };
         var cfg = AppConfig.Load(configPath);
+        FileLog.ShowLoginNames = cfg.LogLoginNames;
         FileLog.Configure(folder, cfg.VerboseLogging, Installer.ToolVersion);
         FileLog.Write("cli", $"{ExeName} {Installer.ToolVersion}: {string.Join(' ', args)}");
 

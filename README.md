@@ -185,6 +185,7 @@ Logs go in the same folder:
 
 - `crash.log` is always written when SDMM hits an unexpected error. It stays under 1 MB.
 - `sdmm.log` is a detailed log of everything SDMM does: files it changes in your games and on servers, its own settings and cache files, changes to SMM's profiles, web requests, programs it starts, and errors in full. It's off by default; turn it on under **Settings → Storage**. It stays under 5 MB by dropping the oldest lines first.
+- Both logs write a server's login name as `<login>` (for example `sftp://<login>@host`), so you can share them. To see the real login names, tick **Show server login names in log files** under **Settings → Security**. Passwords and tokens are never written.
 
 Logs include folder paths and server addresses, but never tokens, keys or passwords. **Settings → Storage → Open log folder** opens the folder.
 

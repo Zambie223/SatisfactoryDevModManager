@@ -239,6 +239,11 @@
                               IsEnabled="{Binding VirusTotalEnabledDraft}" />
                     <TextBlock Style="{StaticResource Hint}"
                                Text="New dev builds usually aren't known to VirusTotal, so without this they're only noted in the log. Uploading sends the whole mod file to VirusTotal, where its paying customers can download it, so leave this off for builds that aren't public. A first scan takes a minute or two." />
+
+                    <TextBlock Style="{StaticResource Header}" Text="Log files" Margin="0,22,0,6" />
+                    <CheckBox Content="Show server login names in log files" IsChecked="{Binding LogLoginNamesDraft}" Margin="0,2,0,4" />
+                    <TextBlock Style="{StaticResource Hint}"
+                               Text="Off by default: the log files (sdmm.log and crash.log) write a server's address as sftp://&lt;login&gt;@host, so you can share them in a bug report. Turn this on only if you need to see which login was used. Passwords and tokens are never written either way." />
                 </StackPanel>
             </ScrollViewer>
 

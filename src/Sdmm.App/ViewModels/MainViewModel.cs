@@ -1325,6 +1325,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void ConfigureLogs()
     {
+        Sdmm.Core.Diagnostics.FileLog.ShowLoginNames = _config.LogLoginNames;
         Sdmm.Core.Diagnostics.FileLog.Configure(LogFolder, _config.VerboseLogging);
         if (_config.VerboseLogging)
             Sdmm.Core.Diagnostics.FileLog.Write("app", $"{Brand.Current.Name} {AppInfo.Version} on {Environment.OSVersion}, .NET {Environment.Version}; settings {_configPath}");
@@ -2142,6 +2143,7 @@ public sealed partial class MainViewModel : ObservableObject
         UseSmrDraft = UseSmr;
         VirusTotalEnabledDraft = _config.VirusTotalEnabled;
         VirusTotalUploadDraft = _config.VirusTotalUpload;
+        LogLoginNamesDraft = _config.LogLoginNames;
         UpdateVirusTotalStatus();
     }
 
@@ -2206,6 +2208,13 @@ public sealed partial class MainViewModel : ObservableObject
             SaveConfig();
             Log(!VirusTotalEnabledDraft ? "VirusTotal checks off."
                 : $"VirusTotal checks on{(VirusTotalUploadDraft ? ", uploading files it hasn't seen" : ", looking files up by their SHA-256 only")}.");
+        }
+        if (_config.LogLoginNames != LogLoginNamesDraft)
+        {
+            _config.LogLoginNames = LogLoginNamesDraft;
+            Sdmm.Core.Diagnostics.FileLog.ShowLoginNames = LogLoginNamesDraft;
+            SaveConfig();
+            Log(LogLoginNamesDraft ? "Log files now show server login names." : "Log files hide server login names again.");
         }
         LoadSourcesIntoForm();
         return true;
@@ -3467,6 +3476,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>The Security tab's checkboxes; applied on Save, like the sources.</summary>
     [ObservableProperty] private bool _virusTotalEnabledDraft;
     [ObservableProperty] private bool _virusTotalUploadDraft;
+
+    /// <summary>Settings → Security: write server login names in the log files (off by default).</summary>
+    [ObservableProperty] private bool _logLoginNamesDraft;
     [ObservableProperty] private bool _hasVirusTotalKey;
     [ObservableProperty] private string _virusTotalKeyStatus = "";
 
