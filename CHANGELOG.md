@@ -9,7 +9,7 @@ Changes since the first public release of Satisfactory Dev Mod Manager. The firs
 - **Where each mod comes from:** every row in the list now says what it can be installed from and who installed the copy here, for example "Available: GitHub · Installed by SMM".
 - **Active modpack:** each game or server can follow a modpack, picked under the game or server list, like SMM's profiles. Installs, updates and removals made in SDMM (and the command line tool) update it. When the game or server differs from it because of changes made elsewhere, a banner says what's different and offers **Update the modpack** or **Apply the modpack**. Applying a saved modpack makes it the one that game or server follows.
 - **Duplicate** in the Modpacks window makes a separate copy of a modpack.
-- The app's update also updates `SatisfactoryDevModManager-cli.exe` when it's next to the app. It's never downloaded otherwise.
+- From this version on, the app's update also updates `SatisfactoryDevModManager-cli.exe` when it's next to the app (the update to this version is still done by the version you have, so replace the command line tool by hand once). It's never downloaded otherwise.
 
 ### Changed
 - In the Modpacks window, "Goes on" is now **Install on** (Games and servers / Players' games only / Servers only). A side worked out from the mod's files is marked "auto"; one you picked shows a button to go back to automatic.
