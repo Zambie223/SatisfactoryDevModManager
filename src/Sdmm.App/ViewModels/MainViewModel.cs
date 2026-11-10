@@ -1544,8 +1544,16 @@ public sealed partial class MainViewModel : ObservableObject
             var pkg = await cache.GetAsync(gh, b, info.Target);
             requests.Add(new InstallRequest(pkg, new PackageSource(b.RepoFullName, b.Tag, asset.Name)));
         }
-        return await InstallRequestsAsync(item, opened, requests, cache);
+        return await InstallRequestsAsync(item, opened, requests, cache, CachedRemoteMods(item));
     }
+
+    /// <summary>
+    /// The installed mods from the last full read of a hosted server, or null to read them again. Over SFTP/FTP a full
+    /// read costs round trips for every mod; the installer re-checks each folder it changes, so this list is enough
+    /// for planning. Local installs are read fresh, which is cheap.
+    /// </summary>
+    private IReadOnlyList<InstalledMod>? CachedRemoteMods(InstallItem item) =>
+        item.IsRemote && _scan is { } s && s.Item == item ? s.Read.Mods : null;
 
     /// <summary>Plans (with confirmations) and installs downloaded packages into an open install. False if refused or cancelled.</summary>
     /// <param name="installed">What's installed, when the caller just read it; saves the planner reading it again.</param>
@@ -2805,10 +2813,11 @@ public sealed partial class MainViewModel : ObservableObject
         using var smr = CreateSmr();
 
         // Read the install and work out what to install.
+        var cachedMods = CachedRemoteMods(item);
         var (info, installed) = await Task.Run(() =>
         {
             using var o = Open(item);
-            return (o.Install.Detect(), ModScanner.Scan(o.Install.FileSystem));
+            return (o.Install.Detect(), cachedMods ?? ModScanner.Scan(o.Install.FileSystem));
         });
         Status = "Resolving dependencies on SMR…";
         var plan = await Sdmm.Core.Smr.SmrResolver.ResolveAsync(requests, info.Target, info.Changelist, installed,
