@@ -70,6 +70,29 @@ public class SmrTests
         Assert.Equal(allowed, SmrClient.IsAllowedLogoUrl(url));
 
     [Fact]
+    public async Task DownloadsAreOnlyUsedWithAMatchingSmrHash()
+    {
+        var bytes = Encoding.UTF8.GetBytes("zipbytes");
+        var good = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var http = new FakeHttp().On("/v1/version/a/Windows/download", _ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+        using var smr = new SmrClient(http);
+        SmrTarget T(string? sha) => new(Packaging.ModTarget.Windows, "/v1/version/a/Windows/download", bytes.Length, sha);
+
+        using (var ms = new MemoryStream())
+        {
+            await smr.DownloadAsync(T(good.ToUpperInvariant()), ms, ct: Ct);
+            Assert.Equal(bytes, ms.ToArray());
+        }
+        await Assert.ThrowsAsync<SmrException>(() => smr.DownloadAsync(T(new string('0', 64)), new MemoryStream(), ct: Ct));
+
+        int before = http.Requests.Count;
+        foreach (var missing in new[] { null, "" })
+            await Assert.ThrowsAsync<SmrException>(() => smr.DownloadAsync(T(missing), new MemoryStream(), ct: Ct));
+        Assert.Equal(before, http.Requests.Count);   // refused before downloading anything
+    }
+
+    [Fact]
     public async Task InvalidReferencesAreNeverSent()
     {
         string? sent = null;

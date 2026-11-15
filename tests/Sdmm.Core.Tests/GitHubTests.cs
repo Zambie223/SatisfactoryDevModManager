@@ -260,6 +260,22 @@ public class GitHubTests
     }
 
     [Fact]
+    public async Task RedirectsAwayFromHttpsAreNotFollowed()
+    {
+        var http = new FakeHttp()
+            .On("/repos/me/M/releases/assets/100", _ =>
+            {
+                var r = new HttpResponseMessage(HttpStatusCode.Found);
+                r.Headers.Location = new Uri("http://objects.githubusercontent.com/signed?sig=abc");
+                return r;
+            })
+            .OnHost("objects.githubusercontent.com", _ => throw new InvalidOperationException("followed an http redirect"));
+        using var gh = new GitHubClient("secret", handler: http);
+        await Assert.ThrowsAsync<GitHubApiException>(() => gh.DownloadAssetAsync("me", "M", 100, new MemoryStream(), ct: Ct));
+        Assert.Single(http.Requests);
+    }
+
+    [Fact]
     public async Task CacheRejectsDigestMismatchAndKeepsNothing()
     {
         using var tmp = new TempDir();

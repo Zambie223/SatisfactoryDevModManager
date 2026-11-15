@@ -2,6 +2,13 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## Unreleased
+
+### Changed
+- Built with the November 2026 .NET 10 security update (runtime 10.0.15, SDK 10.0.404).
+- Mods from ficsit.app are only installed when SMR lists a SHA-256 checksum for the file and the download matches it. Before, a file without a checksum was used unchecked; only a few mods from 2019, which don't run on today's game, lack one.
+- A GitHub download that redirects to a plain `http://` address is now refused instead of followed.
+
 ## 0.4.1 (2026-11-10)
 
 ### Added

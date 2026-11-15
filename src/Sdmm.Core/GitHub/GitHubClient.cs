@@ -257,6 +257,9 @@ public sealed partial class GitHubClient : IDisposable
                 response.Dispose();
                 if (hop >= MaxRedirects) throw new GitHubApiException(code, $"Too many redirects fetching {url}");
                 url = location.IsAbsoluteUri ? location : new Uri(url, location);
+                // GitHub only ever redirects to https; anything else (http, file, ...) is refused, not followed.
+                if (url.Scheme != Uri.UriSchemeHttps)
+                    throw new GitHubApiException(code, $"GitHub redirected to a non-https address ({url.Scheme}://{url.Host}); not followed.");
                 etag = null;
                 continue;
             }

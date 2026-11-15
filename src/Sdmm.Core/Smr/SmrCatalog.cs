@@ -8,7 +8,7 @@ namespace Sdmm.Core.Smr;
 
 /// <summary>One platform's download of an SMR version.</summary>
 /// <param name="Link">Relative to <see cref="SmrClient.ApiRoot"/>, for example "/v1/version/{id}/Windows/download".</param>
-/// <param name="Sha256">Hex SHA-256 of the zip, checked after download.</param>
+/// <param name="Sha256">Hex SHA-256 of the zip, checked after download. A download without one is refused.</param>
 public sealed record SmrTarget(ModTarget Target, string Link, long? Size, string? Sha256);
 
 /// <param name="Condition">An SML version range, for example "^3.12.0".</param>
@@ -121,12 +121,15 @@ public sealed partial class SmrClient
 
     /// <summary>
     /// Downloads one platform's zip into <paramref name="destination"/> and checks it against SMR's SHA-256.
-    /// Throws <see cref="SmrException"/> on a failed download or a hash mismatch.
+    /// Throws <see cref="SmrException"/> on a failed download or a hash mismatch, and before downloading anything when
+    /// SMR lists no SHA-256 (only a few 2019 uploads lack one), since the file then can't be verified.
     /// </summary>
     public async Task DownloadAsync(SmrTarget target, Stream destination, IProgress<long>? progress = null, CancellationToken ct = default)
     {
         if (!target.Link.StartsWith("/v1/", StringComparison.Ordinal))
             throw new SmrException($"Unexpected download link '{target.Link}'.");
+        if (target.Sha256 is not { Length: > 0 } expected)
+            throw new SmrException("SMR lists no SHA-256 for this file, so the download can't be verified; it was not downloaded.");
         var uri = new Uri(ApiRoot, target.Link);
         HttpResponseMessage response;
         try
@@ -154,7 +157,7 @@ public sealed partial class SmrClient
                 progress?.Report(total);
             }
             var hash = Convert.ToHexStringLower(sha.GetHashAndReset());
-            if (target.Sha256 is { Length: > 0 } expected && !hash.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            if (!hash.Equals(expected, StringComparison.OrdinalIgnoreCase))
                 throw new SmrException($"The downloaded file's SHA-256 ({hash}) doesn't match SMR's ({expected}); it was not used.");
         }
     }

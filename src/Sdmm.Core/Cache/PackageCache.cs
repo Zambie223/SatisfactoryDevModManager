@@ -83,7 +83,8 @@ public sealed class PackageCache
         if (File.Exists(path) && File.Exists(shaPath))
         {
             var sha = File.ReadAllText(shaPath).Trim();
-            if ((t.Sha256 is null || sha.Equals(t.Sha256, StringComparison.OrdinalIgnoreCase)) && ModPackage.ComputeSha256(path) == sha)
+            // No SMR hash: fall through to the download, which refuses it.
+            if (t.Sha256 is { Length: > 0 } && sha.Equals(t.Sha256, StringComparison.OrdinalIgnoreCase) && ModPackage.ComputeSha256(path) == sha)
             {
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
                 return ModPackage.Open(path, sha);
