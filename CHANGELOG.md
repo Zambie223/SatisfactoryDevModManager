@@ -2,7 +2,7 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
-## Unreleased
+## 0.4.2 (2026-11-14)
 
 ### Changed
 - Built with the November 2026 .NET 10 security update (runtime 10.0.15, SDK 10.0.404).

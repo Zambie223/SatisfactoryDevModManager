@@ -5,7 +5,7 @@ The SDMM exes (`SatisfactoryDevModManager.exe` and `SatisfactoryDevModManager-cl
 | Component | Version | Copyright | Project |
 |---|---|---|---|
 | .NET runtime and Windows Desktop runtime (WPF) | 10.0 | © .NET Foundation and Contributors | <https://github.com/dotnet/runtime>, <https://github.com/dotnet/wpf> |
-| System.Security.Cryptography.ProtectedData | 10.0.14 | © Microsoft Corporation | <https://dot.net/> |
+| System.Security.Cryptography.ProtectedData | 10.0.15 | © Microsoft Corporation | <https://dot.net/> |
 | Microsoft.Extensions.Logging.Abstractions | 8.0.3 | © Microsoft Corporation | <https://dot.net/> |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 8.0.2 | © Microsoft Corporation | <https://dot.net/> |
 | CommunityToolkit.Mvvm | 8.4.2 | © .NET Foundation and Contributors | <https://github.com/CommunityToolkit/dotnet> |
