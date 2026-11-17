@@ -27,6 +27,8 @@
                             ToolTip="Make a copy of the selected modpack to change separately" />
                     <Button Style="{StaticResource GreyButton}" Content="Delete" Command="{Binding DeleteCommand}" Margin="3,0,0,6" />
                 </UniformGrid>
+                <Button Style="{StaticResource GreyButton}" Content="Compare…" Command="{Binding CompareCommand}" HorizontalContentAlignment="Center" Margin="0,0,0,6"
+                        ToolTip="See which mods two modpacks share and which each one is missing" AutomationProperties.Name="Compare modpacks" />
                 <!-- SMM profiles as modpacks -->
                 <StackPanel Visibility="{Binding IsVariant, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="From an SMM profile" Foreground="{StaticResource SubtleTextBrush}" Margin="0,6,0,4" />

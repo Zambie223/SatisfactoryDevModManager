@@ -19,9 +19,12 @@ public sealed partial class ModpackModRow : ObservableObject
     public ModpackMod Mod { get; }
     public string ModReference => Mod.ModReference;
     public string VersionText => Mod.Version ?? Mod.Constraint ?? "newest";
-    public string SourceText => Mod.Source switch
+    public string SourceText => SourceLabel(Mod);
+
+    /// <summary>Where a pack mod comes from, as shown in the Modpacks and Compare windows.</summary>
+    public static string SourceLabel(ModpackMod mod) => mod.Source switch
     {
-        ModpackSource.GitHub => Mod.Repo ?? "GitHub",
+        ModpackSource.GitHub => mod.Repo ?? "GitHub",
         ModpackSource.Imported => "imported zip",
         _ => "SMR",
     };
@@ -34,7 +37,7 @@ public sealed partial class ModpackModRow : ObservableObject
 
     public static IReadOnlyList<string> SideOptions { get; } = ["Games and servers", "Players' games only", "Servers only"];
 
-    private static string Label(ModSide side) => side switch
+    public static string Label(ModSide side) => side switch
     {
         ModSide.ClientOnly => "Players' games only",
         ModSide.ServerOnly => "Servers only",
@@ -72,7 +75,7 @@ public sealed partial class ModpackModRow : ObservableObject
         Mod.SideSetByUser = false;
         OnPropertyChanged(nameof(SideText));
         OnPropertyChanged(nameof(IsAutoSide));
-            OnPropertyChanged(nameof(IsSideOverridden));
+        OnPropertyChanged(nameof(IsSideOverridden));
         OnPropertyChanged(nameof(SideTip));
     }
 }
@@ -165,6 +168,7 @@ public sealed partial class ModpacksViewModel : ObservableObject
         SmmProfiles = IsVariant ? main.SmmSettings.Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList() : [];
         SelectedSmmProfile = SmmProfiles.FirstOrDefault();
         _main.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.IsBusy)) ApplyCommand.NotifyCanExecuteChanged(); };
+        Packs.CollectionChanged += (_, _) => CompareCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Writes the modpacks back to the settings file (edits are made in place).</summary>
@@ -193,6 +197,18 @@ public sealed partial class ModpacksViewModel : ObservableObject
         Packs.Add(item);
         Selected = item;
         Save();
+    }
+
+    /// <summary>Asks the window to open the Compare window, starting from the selected pack.</summary>
+    public event Action<Modpack?>? CompareRequested;
+
+    private bool CanCompare() => Packs.Count >= 2;
+
+    [RelayCommand(CanExecute = nameof(CanCompare))]
+    private void Compare()
+    {
+        Save();
+        CompareRequested?.Invoke(Selected?.Pack);
     }
 
     /// <summary>A separate copy of the selected pack, to change without touching the original.</summary>

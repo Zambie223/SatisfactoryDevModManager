@@ -2,6 +2,14 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## 0.4.3 (2026-11-17)
+
+### Added
+- **Compare modpacks:** **Compare…** in the Modpacks window shows two modpacks side by side: the mods both have, and the ones each is missing, with tabs to show only one group. A mod in both is marked when its version, source, side or on/off switch differs.
+
+### Changed
+- Updated the SFTP library (SSH.NET 2026.0.1): hardening fixes and better throughput on high-latency connections.
+
 ## 0.4.2 (2026-11-14)
 
 ### Changed

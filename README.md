@@ -60,6 +60,7 @@ A modpack is a named list of mods and versions; SMM calls these profiles. Open *
 
 - **Save** the selected game or server as a modpack.
 - **Duplicate** a modpack to change a copy of it.
+- **Compare…** shows two modpacks side by side: which mods both have, and which each one is missing. A mod in both is marked when its version, source, side or on/off switch differs. Comparing never changes either modpack.
 - **Export** a modpack to a `.modpack.json` file, or **import** one someone sent you.
 - **Edit** a modpack: rename it, switch mods on or off, remove them, or set where each is installed (games and servers, players' games only, or servers only).
 - **Apply** it to the selected game or server.

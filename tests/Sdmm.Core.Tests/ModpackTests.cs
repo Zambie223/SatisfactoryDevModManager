@@ -207,4 +207,57 @@ public class ModpackTests
         Assert.Equal(["Off", "Outside", "ServerThing"], pack.Mods.Select(m => m.ModReference)); // other side and switched-off entries stay
         Assert.Equal((0, 0), (ModpackIO.Compare(pack, installed, isServer: false).Missing.Count, ModpackIO.Compare(pack, installed, isServer: false).Extra.Count));
     }
+
+    private static ModpackMod P(string modRef, string? version = "1.0.0", ModpackSource source = ModpackSource.Smr, string? repo = null,
+        ModSide side = ModSide.Both, bool enabled = true, string? constraint = null) =>
+        new() { ModReference = modRef, Version = version, Source = source, Repo = repo, Side = side, Enabled = enabled, Constraint = constraint };
+
+    [Fact]
+    public void ComparingTwoPacksShowsSharedAndMissingMods()
+    {
+        var a = new Modpack { Name = "A", Mods = [P("Shared"), P("OnlyA"), P("Bumped", "1.0.0"), P("zLast")] };
+        var b = new Modpack { Name = "B", Mods = [P("bumped", "1.1.0"), P("OnlyB"), P("SHARED"), P("zLast")] };
+
+        var diff = ModpackDiff.Compare(a, b);
+
+        Assert.Equal(["Bumped", "OnlyA", "OnlyB", "Shared", "zLast"], diff.Select(d => d.ModReference));   // matched ignoring case, sorted
+        Assert.Equal([ModpackDiffKind.Different, ModpackDiffKind.OnlyLeft, ModpackDiffKind.OnlyRight, ModpackDiffKind.Same, ModpackDiffKind.Same],
+            diff.Select(d => d.Kind));
+        Assert.Equal(ModpackDiffParts.Version, diff[0].Differences);
+        Assert.Null(diff[1].Right);
+        Assert.Null(diff[2].Left);
+        Assert.Equal("1.0.0", diff[0].Left!.Version);
+        Assert.Equal("1.1.0", diff[0].Right!.Version);
+    }
+
+    [Theory]
+    [InlineData("1.0.0", "v1.0.0", ModpackDiffParts.None)]
+    [InlineData("1.0.0+dev.1", "1.0.0+dev.2", ModpackDiffParts.Version)]   // different dev builds
+    [InlineData("1.0.0", "1.0.0-beta.1", ModpackDiffParts.Version)]
+    [InlineData("1.0.0", null, ModpackDiffParts.Version)]                // a saved version vs "newest"
+    public void VersionsCompareAsVersions(string? left, string? right, ModpackDiffParts expected) =>
+        Assert.Equal(expected, ModpackDiff.Compare(new Modpack { Mods = [P("M", left)] }, new Modpack { Mods = [P("M", right)] }).Single().Differences);
+
+    [Fact]
+    public void ReportsEachKindOfDifference()
+    {
+        ModpackDiffParts Diff(ModpackMod l, ModpackMod r) =>
+            ModpackDiff.Compare(new Modpack { Mods = [l] }, new Modpack { Mods = [r] }).Single().Differences;
+
+        Assert.Equal(ModpackDiffParts.None, Diff(P("M", null, constraint: ">=1.0.0"), P("M", null, constraint: ">=1.0.0")));
+        Assert.Equal(ModpackDiffParts.Version, Diff(P("M", null, constraint: ">=1.0.0"), P("M", null, constraint: "^2.0.0")));
+        Assert.Equal(ModpackDiffParts.Source, Diff(P("M"), P("M", source: ModpackSource.GitHub, repo: "me/M")));
+        Assert.Equal(ModpackDiffParts.Source, Diff(P("M", source: ModpackSource.GitHub, repo: "me/M"), P("M", source: ModpackSource.GitHub, repo: "you/M")));
+        Assert.Equal(ModpackDiffParts.None, Diff(P("M", source: ModpackSource.GitHub, repo: "me/M"), P("M", source: ModpackSource.GitHub, repo: "Me/M")));
+        Assert.Equal(ModpackDiffParts.Side, Diff(P("M"), P("M", side: ModSide.ServerOnly)));
+        Assert.Equal(ModpackDiffParts.Enabled | ModpackDiffParts.Version, Diff(P("M"), P("M", "2.0.0", enabled: false)));
+    }
+
+    [Fact]
+    public void ComparingAPackWithItselfFindsNoDifferences()
+    {
+        var a = new Modpack { Mods = [P("A"), P("B", enabled: false), P("C", side: ModSide.ClientOnly)] };
+        Assert.All(ModpackDiff.Compare(a, a.Copy("copy", Now)), d => Assert.Equal(ModpackDiffKind.Same, d.Kind));
+        Assert.Empty(ModpackDiff.Compare(new Modpack(), new Modpack()));
+    }
 }

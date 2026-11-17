@@ -1,0 +1,80 @@
+<Window x:Class="Sdmm.App.ModpackCompareWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Sdmm.App"
+        Title="Compare modpacks" Width="1000" Height="620" MinWidth="720" MinHeight="380"
+        Icon="{Binding Icon, Source={x:Static local:Brand.Current}}" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13">
+    <DockPanel Margin="18,14,18,16">
+        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}"
+                   Text="Shows which mods both modpacks have and which each one is missing. Mods are matched by name; a mod in both is marked when its version, source, side or on/off switch differs. Nothing here changes either modpack." />
+
+        <!-- The two packs -->
+        <Grid DockPanel.Dock="Top" Margin="0,4,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox Grid.Column="0" ItemsSource="{Binding Packs}" SelectedItem="{Binding Left}" DisplayMemberPath="Name"
+                      IsSynchronizedWithCurrentItem="False" Background="{StaticResource ControlOnPanelBrush}"
+                      AutomationProperties.Name="First modpack" />
+            <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE8AB;" Command="{Binding SwapCommand}" Margin="10,0"
+                    ToolTip="Swap the two modpacks" AutomationProperties.Name="Swap the two modpacks" />
+            <ComboBox Grid.Column="2" ItemsSource="{Binding Packs}" SelectedItem="{Binding Right}" DisplayMemberPath="Name"
+                      IsSynchronizedWithCurrentItem="False" Background="{StaticResource ControlOnPanelBrush}"
+                      AutomationProperties.Name="Second modpack" />
+        </Grid>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Visibility="{Binding Summary, Converter={StaticResource EmptyToCollapsed}}" />
+
+        <!-- Filter tabs -->
+        <UniformGrid DockPanel.Dock="Top" Rows="1" Margin="0,0,0,10">
+            <RadioButton Style="{StaticResource TabButton}" GroupName="CompareFilter" IsChecked="{Binding ShowAll}" AutomationProperties.Name="All">
+                <TextBlock Text="{Binding AllLabel}" TextTrimming="CharacterEllipsis" />
+            </RadioButton>
+            <RadioButton Style="{StaticResource TabButton}" GroupName="CompareFilter" IsChecked="{Binding ShowOnlyLeft}" AutomationProperties.Name="Only in the first modpack">
+                <TextBlock Text="{Binding OnlyLeftLabel}" TextTrimming="CharacterEllipsis" ToolTip="{Binding OnlyLeftLabel}" />
+            </RadioButton>
+            <RadioButton Style="{StaticResource TabButton}" GroupName="CompareFilter" IsChecked="{Binding ShowOnlyRight}" AutomationProperties.Name="Only in the second modpack">
+                <TextBlock Text="{Binding OnlyRightLabel}" TextTrimming="CharacterEllipsis" ToolTip="{Binding OnlyRightLabel}" />
+            </RadioButton>
+            <RadioButton Style="{StaticResource TabButton}" GroupName="CompareFilter" IsChecked="{Binding ShowBoth}" AutomationProperties.Name="In both">
+                <TextBlock Text="{Binding BothLabel}" TextTrimming="CharacterEllipsis" />
+            </RadioButton>
+        </UniformGrid>
+
+        <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" HorizontalAlignment="Right" Margin="0,10,0,0" />
+
+        <Grid>
+            <DataGrid ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False" RowHeight="NaN"
+                      AutoGenerateColumns="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Mod" Binding="{Binding ModReference}" Width="200" />
+                    <DataGridTextColumn x:Name="LeftColumn" Binding="{Binding LeftText}" Width="*" />
+                    <DataGridTextColumn x:Name="RightColumn" Binding="{Binding RightText}" Width="*" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="240">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <Setter Property="Margin" Value="0,6" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Same">
+                                        <Setter Property="Foreground" Value="{StaticResource SubtleTextBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Different">
+                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock Text="Nothing to show for this filter." Foreground="{StaticResource SubtleTextBrush}" Margin="8,44,0,0"
+                       VerticalAlignment="Top" IsHitTestVisible="False"
+                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
+        </Grid>
+    </DockPanel>
+</Window>
