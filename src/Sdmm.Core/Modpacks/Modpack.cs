@@ -200,7 +200,7 @@ public static partial class ModpackIO
     /// </summary>
     public static (IReadOnlyList<string> Missing, IReadOnlyList<string> Extra) Compare(Modpack pack, IReadOnlyList<InstalledMod> installed, bool isServer)
     {
-        var changes = ModpackPlanner.Plan(pack, installed, isServer, removeOthers: true, useNewest: false);
+        var changes = ModpackPlanner.Plan(pack, installed, isServer, removeOthers: true);
         return (changes.Install.Select(m => m.ModReference).ToList(), changes.Remove.Concat(changes.KeptForeign).ToList());
     }
 
@@ -277,8 +277,12 @@ public sealed record ModpackChanges(
 
 public static class ModpackPlanner
 {
-    /// <param name="useNewest">Ignore the pack's versions and use the newest that fit (or match its constraints).</param>
-    public static ModpackChanges Plan(Modpack pack, IReadOnlyList<InstalledMod> installed, bool isServer, bool removeOthers, bool useNewest)
+    /// <param name="targets">
+    /// Versions to install instead of the saved ones, by mod reference (for example the newest, when the user chose to
+    /// update). A mod already at its target is left alone, so updating doesn't reinstall what's already current.
+    /// </param>
+    public static ModpackChanges Plan(Modpack pack, IReadOnlyList<InstalledMod> installed, bool isServer, bool removeOthers,
+        IReadOnlyDictionary<string, SemVersion>? targets = null)
     {
         var byRef = installed.GroupBy(m => m.ModReference, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var install = new List<ModpackMod>();
@@ -291,8 +295,9 @@ public static class ModpackPlanner
             if (!m.AppliesTo(isServer)) { skipped.Add((m.ModReference, isServer ? "only for players' games" : "only for servers")); continue; }
             wanted.Add(m.ModReference);
             var current = byRef.TryGetValue(m.ModReference, out var i) ? i.Descriptor?.EffectiveVersion : null;
-            bool matches = current is not null && !useNewest && (
-                m.Version is not null ? SemVersion.TryParse(m.Version, out var v) && v == current
+            bool matches = current is not null && (
+                targets?.TryGetValue(m.ModReference, out var target) == true ? target == current
+                : m.Version is not null ? SemVersion.TryParse(m.Version, out var v) && v == current
                 : m.Constraint is null || (VersionRange.TryParse(m.Constraint, out var r, out _) && r!.Matches(current)));
             if (matches) unchanged.Add(m.ModReference);
             else install.Add(m);

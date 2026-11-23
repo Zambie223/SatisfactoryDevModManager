@@ -6,6 +6,18 @@ using Sdmm.Core.Modpacks;
 
 namespace Sdmm.App.ViewModels;
 
+/// <summary>
+/// A note on a modpack mod for the Modpacks and Compare windows: SMR reports it broken or damaged, or its GitHub repo
+/// isn't in the sources.
+/// </summary>
+public sealed record ModpackModStatus(string Text, string Tip, string BrushKey)
+{
+    public System.Windows.Media.Brush Brush => (System.Windows.Media.Brush)System.Windows.Application.Current.Resources[BrushKey];
+
+    /// <summary>For picking the most serious of several notes.</summary>
+    public int Severity => BrushKey switch { "BadBrush" => 3, "WarnBrush" => 2, _ => 1 };
+}
+
 /// <summary>One mod in the Modpacks window; edits write straight through to the <see cref="ModpackMod"/>.</summary>
 public sealed partial class ModpackModRow : ObservableObject
 {
@@ -19,6 +31,20 @@ public sealed partial class ModpackModRow : ObservableObject
     public ModpackMod Mod { get; }
     public string ModReference => Mod.ModReference;
     public string VersionText => Mod.Version ?? Mod.Constraint ?? "newest";
+
+    /// <summary>A note on this mod (SMR report, repo not in the sources), or null.</summary>
+    [ObservableProperty] private ModpackModStatus? _status;
+
+    /// <summary>After the pack changed elsewhere (applied with newer versions, or followed an install).</summary>
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(VersionText));
+        OnPropertyChanged(nameof(SourceText));
+        OnPropertyChanged(nameof(Enabled));
+        OnPropertyChanged(nameof(SideText));
+        OnPropertyChanged(nameof(IsAutoSide));
+        OnPropertyChanged(nameof(IsSideOverridden));
+    }
     public string SourceText => SourceLabel(Mod);
 
     /// <summary>Where a pack mod comes from, as shown in the Modpacks and Compare windows.</summary>
@@ -119,6 +145,18 @@ public sealed partial class ModpackItem : ObservableObject
 
     public string Summary => $"{Rows.Count} mods";
 
+    /// <summary>Brings the rows up to date with the pack, which may have changed while the window was open.</summary>
+    public void Resync()
+    {
+        if (!Rows.Select(r => r.Mod).SequenceEqual(Pack.Mods))
+        {
+            Rows.Clear();
+            foreach (var m in Pack.Mods) Rows.Add(new ModpackModRow(m));
+            OnPropertyChanged(nameof(Summary));
+        }
+        else foreach (var r in Rows) r.Refresh();
+    }
+
     public void RemoveRow(ModpackModRow row)
     {
         Rows.Remove(row);
@@ -150,7 +188,6 @@ public sealed partial class ModpacksViewModel : ObservableObject
 
     [ObservableProperty] private ModpackModRow? _selectedRow;
     [ObservableProperty] private bool _removeOthers = true;
-    [ObservableProperty] private bool _useNewest;
     [ObservableProperty] private string? _selectedSmmProfile;
 
     public string TargetText => _main.SelectedInstall is { } i
@@ -169,6 +206,47 @@ public sealed partial class ModpacksViewModel : ObservableObject
         SelectedSmmProfile = SmmProfiles.FirstOrDefault();
         _main.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainViewModel.IsBusy)) ApplyCommand.NotifyCanExecuteChanged(); };
         Packs.CollectionChanged += (_, _) => CompareCommand.NotifyCanExecuteChanged();
+        _ = LoadStatusesAsync();
+    }
+
+    private IReadOnlyDictionary<string, Sdmm.Core.Smr.SmrMod> _smrInfo = new Dictionary<string, Sdmm.Core.Smr.SmrMod>();
+
+    /// <summary>Looks the packs' SMR mods up on SMR (for broken/damaged reports), then updates every row's note.</summary>
+    private async Task LoadStatusesAsync()
+    {
+        UpdateStatuses();
+        var refs = _main.Modpacks.SelectMany(p => p.Mods).Where(m => m.Source == ModpackSource.Smr).Select(m => m.ModReference).ToList();
+        if (refs.Count == 0) return;
+        try
+        {
+            _smrInfo = await _main.GetSmrInfoAsync(refs);
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException or IOException)
+        {
+            _main.Log("SMR lookup for modpacks skipped: " + ex.Message);
+        }
+        UpdateStatuses();
+    }
+
+    private void UpdateStatuses()
+    {
+        foreach (var row in Packs.SelectMany(p => p.Rows)) row.Status = StatusFor(row.Mod);
+    }
+
+    /// <summary>
+    /// The note for a pack mod: SMR's broken/damaged report (for the selected game or server's branch) for mods
+    /// installed from SMR, or that a GitHub mod's repo isn't in the sources. Dev builds have no SMR report.
+    /// </summary>
+    public ModpackModStatus? StatusFor(ModpackMod m)
+    {
+        if (m.Source == ModpackSource.Smr && _smrInfo.TryGetValue(m.ModReference, out var smr) &&
+            Sdmm.Core.Smr.SmrReport.For(smr, _main.BranchOf(_main.SelectedInstall)) is { } r)
+            return new(r.Short, r.Message, r.Level == Sdmm.Core.Smr.SmrReportLevel.Broken ? "BadBrush" : "WarnBrush");
+        if (m.Source == ModpackSource.GitHub && m.Repo is { Length: > 0 } repo && !_main.RepoInSources(repo))
+            return new("Not in your sources",
+                $"{repo} isn't in your mod sources, so SDMM can't install this mod yet. Applying the modpack offers to add it, or add it under Settings → Mod sources.",
+                "InfoBrush");
+        return null;
     }
 
     /// <summary>Writes the modpacks back to the settings file (edits are made in place).</summary>
@@ -243,7 +321,12 @@ public sealed partial class ModpacksViewModel : ObservableObject
         {
             var info = new FileInfo(file);
             if (info.Length > 5 * 1024 * 1024) throw new FormatException("The file is too big to be a modpack.");
-            Add(ModpackIO.Import(File.ReadAllText(file), DateTimeOffset.UtcNow));
+            var pack = ModpackIO.Import(File.ReadAllText(file), DateTimeOffset.UtcNow);
+            Add(pack);
+            // Someone else's pack may use GitHub repos this user doesn't follow.
+            _main.OfferToAddSources(_main.ReposMissingFromSources(pack.Mods), "Not now",
+                "Leave the sources as they are. Applying the modpack offers this again.");
+            _ = LoadStatusesAsync();
         }
         catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
         {
@@ -257,6 +340,7 @@ public sealed partial class ModpacksViewModel : ObservableObject
         if (!IsVariant || SelectedSmmProfile is null) return;
         if (!_main.SmmSettings.Profiles.TryGetValue(SelectedSmmProfile, out var profile)) return;
         Add(ModpackIO.FromSmmProfile(profile, DateTimeOffset.UtcNow));
+        _ = LoadStatusesAsync();
     }
 
     private bool HasSelection() => Selected is not null;
@@ -303,9 +387,12 @@ public sealed partial class ModpacksViewModel : ObservableObject
     private bool CanApply() => Selected is not null && !_main.IsBusy && _main.SelectedInstall is not null;
 
     [RelayCommand(CanExecute = nameof(CanApply))]
-    private Task ApplyAsync()
+    private async Task ApplyAsync()
     {
         Save();
-        return _main.ApplyModpackAsync(Selected!.Pack, RemoveOthers, UseNewest);
+        await _main.ApplyModpackAsync(Selected!.Pack, RemoveOthers);
+        // Applying may have updated the pack (newer versions), and added sources change the notes.
+        foreach (var p in Packs) p.Resync();
+        UpdateStatuses();
     }
 }

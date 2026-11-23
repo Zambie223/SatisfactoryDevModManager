@@ -37,6 +37,8 @@
     <SolidColorBrush x:Key="Green.SelectionBrush" Color="#1F3526" />
     <SolidColorBrush x:Key="OkBrush" Color="#5CBA1D" />
     <SolidColorBrush x:Key="WarnBrush" Color="#E8B339" />
+    <!-- Mods SMR reports as broken (like SMM's red) -->
+    <SolidColorBrush x:Key="BadBrush" Color="#E5534B" />
     <SolidColorBrush x:Key="InfoBrush" Color="#6FA8DC" />
     <SolidColorBrush x:Key="MutedBrush" Color="#7A7A7A" />
 

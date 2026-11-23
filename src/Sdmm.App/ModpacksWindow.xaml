@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Sdmm.App"
         xmlns:vm="clr-namespace:Sdmm.App.ViewModels"
-        Title="Modpacks" Width="1080" Height="680" MinWidth="820" MinHeight="420"
+        Title="Modpacks" Width="1180" Height="680" MinWidth="900" MinHeight="420"
         Icon="{Binding Icon, Source={x:Static local:Brand.Current}}" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}" FontSize="13">
     <Grid Margin="18,14,18,16">
@@ -67,9 +67,8 @@
                     <TextBlock Style="{StaticResource Hint}" Text="{Binding TargetText}" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
-                    <CheckBox Content="Also remove mods that aren't in this modpack (only ones SDMM installed)" IsChecked="{Binding RemoveOthers}" Margin="0,0,0,4"
+                    <CheckBox Content="Also remove mods that aren't in this modpack (only ones SDMM installed)" IsChecked="{Binding RemoveOthers}" Margin="0,0,0,8"
                               ToolTip="Makes the game or server match the modpack exactly. Mods that SMM, the host or a hand copy installed are never removed; they're only listed." />
-                    <CheckBox Content="Use the newest versions that fit, instead of the saved versions" IsChecked="{Binding UseNewest}" Margin="0,0,0,8" />
                     <DockPanel>
                         <Button DockPanel.Dock="Right" Content="Close" IsCancel="True" Margin="8,0,0,0" />
                         <Button Style="{StaticResource AccentButton}" Command="{Binding ApplyCommand}" HorizontalAlignment="Left" Padding="16,8"
@@ -91,10 +90,18 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Mod" Binding="{Binding ModReference}" Width="*" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Version" Binding="{Binding VersionText}" Width="120" IsReadOnly="True" />
-                        <DataGridTextColumn Header="From" Binding="{Binding SourceText}" Width="150" IsReadOnly="True" />
-                        <DataGridTemplateColumn Header="Install on" Width="230">
+                        <DataGridTextColumn Header="Mod" Binding="{Binding ModReference}" Width="*" MinWidth="150" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Version" Binding="{Binding VersionText}" Width="95" IsReadOnly="True" />
+                        <DataGridTextColumn Header="From" Binding="{Binding SourceText}" Width="140" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="Note" Width="135">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Status.Text}" Foreground="{Binding Status.Brush}" ToolTip="{Binding Status.Tip}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Install on" Width="215">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <DockPanel ToolTip="{Binding SideTip}">

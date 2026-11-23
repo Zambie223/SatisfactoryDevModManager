@@ -55,6 +55,14 @@ public static class SmrResolver
         return true;
     }
 
+    /// <summary>
+    /// The version a request without a version would get: the newest that fits this install and <paramref name="range"/>,
+    /// releases before pre-releases (the same choice <see cref="ResolveAsync"/> makes). Null when none fits.
+    /// </summary>
+    public static SmrVersion? Newest(IReadOnlyList<SmrVersion> versions, ModTarget target, long changelist, VersionRange? range = null) =>
+        versions.Where(v => Fits(v, target, changelist, out _) && (range is null || range.Matches(v.Version)))
+            .OrderByDescending(v => v.IsRelease).ThenByDescending(v => v.Version).FirstOrDefault();
+
     public static async Task<SmrInstallPlan> ResolveAsync(
         IReadOnlyList<SmrRequest> requests,
         ModTarget target,

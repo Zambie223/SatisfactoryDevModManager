@@ -67,6 +67,10 @@ A modpack is a named list of mods and versions; SMM calls these profiles. Open *
 
 Applying installs or updates what's needed and, if you tick the option, also removes mods SDMM installed that aren't in the pack. Everything is listed in one confirmation first.
 
+- **Saved or newest versions.** A modpack saves each mod's version. When you apply it and newer versions are available (following your pre-release setting), SDMM lists them and asks whether to keep the saved versions or update. Updating also updates the modpack to those versions.
+- **Mods from repos you don't follow.** A modpack someone sent you may have dev builds from GitHub repos that aren't in your sources. Importing or applying it offers to add those repos. A private repo also needs a token that can see it. Mods that still can't be found are listed and left out, and the rest of the modpack is applied.
+- **Notes.** The Modpacks and Compare windows mark mods SMR reports as broken (red) or damaged (yellow), and GitHub mods whose repo isn't in your sources (blue). Hover a note for details.
+
 Modpacks don't contain files, so one pack works everywhere. The right build is picked for whatever it's applied to: Windows for a game, LinuxServer or WindowsServer for a server. Mods set to players' games only are skipped on a server, and mods set to servers only are skipped on a game. When you save a pack, mods whose `.uplugin` sets `RequiredOnRemote` to false are set to the side they were found on; these are marked "auto", and you can change them.
 
 **The modpack a game or server follows.** Under the game or server list, pick the modpack it follows, like an SMM profile. Mods you install, update or remove with SDMM (or the command line tool) then update that modpack. If the game or server changes some other way, for example through SMM, a banner shows what's different and offers to update the modpack or apply it. Applying a saved modpack also makes it the one that game or server follows.
@@ -142,7 +146,9 @@ When a dependency is missing or the wrong version, a banner above the list offer
 
 ## SMR listings
 
-When a dev mod is also published on SMR (ficsit.app), SDMM shows its logo, name and short description in the list. The details panel then has a **Published (SMR)** tab next to **Dev build (GitHub)**. SDMM sends only the mod names to SMR's public API, once per check. Turn this off under Settings → SMR.
+When a dev mod is also published on SMR (ficsit.app), SDMM shows its logo, name and short description in the list. The details panel then has a **Published (SMR)** tab next to **Dev build (GitHub)**. SDMM sends only mod names to SMR's public API: the listed mods once per check, and a modpack's SMR mods when you open **Modpacks…** (each mod is looked up once per session). Turn this off under Settings → SMR; the broken and damaged marks then aren't shown either.
+
+SMR also reports whether each mod works with the current game, separately for Early Access and Experimental. When SMR reports a mod as broken or damaged, it's marked in red or yellow in the list (when the installed copy came from SMR; the report doesn't cover dev builds) and in modpacks, with SMR's note in the details. SDMM uses the report for your game's branch when it can tell it from Steam or Epic, and the Early Access report otherwise (for example on a hosted server).
 
 ## Updating SDMM
 

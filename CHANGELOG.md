@@ -2,6 +2,19 @@
 
 Changes since the first public release of Satisfactory Dev Mod Manager. The first public release itself is described in the [README](README.md); this file lists what changed in each public update after it.
 
+## 0.4.4 (2026-11-22)
+
+### Added
+- **Saved or newest versions:** applying a modpack when newer versions of its mods are available lists them and asks whether to keep the saved versions or update. Updating also updates the modpack. This replaces the "Use the newest versions" checkbox in the Modpacks window, and also applies to a modpack picked in the main window or applied from its banner.
+- **Missing GitHub sources:** importing or applying a modpack with dev builds from GitHub repos that aren't in your sources offers to add them. Applying no longer stops at mods it can't find; they're listed and left out, and the rest of the modpack is applied.
+- **Mods SMR reports as broken or damaged** are marked in red or yellow, with SMR's note, in the mod list and in the Modpacks and Compare windows. SDMM uses the report for your game's branch (Early Access or Experimental) when it can tell it from Steam or Epic.
+- The Modpacks and Compare windows have a **Note** column: broken or damaged on SMR, or a GitHub repo that isn't in your sources.
+
+### Fixed
+- Using the newest versions could install a pre-release even with pre-release builds switched off, and reinstalled mods that were already at the newest version. Both apply to the command line tool's `modpack --newest` too, which now also lists what it updates.
+- An open Modpacks window now shows the changes applying a modpack made to it.
+- The search box has a name for screen readers.
+
 ## 0.4.3 (2026-11-17)
 
 ### Added

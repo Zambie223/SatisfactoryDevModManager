@@ -16,7 +16,7 @@ public partial class ModpacksWindow : Window
         vm.CompareRequested += left =>
         {
             CommitName();   // a name being typed shows up in the comparison too
-            new ModpackCompareWindow(vm.Packs.Select(p => p.Pack).ToList(), left) { Owner = this }.ShowDialog();
+            new ModpackCompareWindow(vm.Packs.Select(p => p.Pack).ToList(), left, vm.StatusFor) { Owner = this }.ShowDialog();
         };
         // Edits to names, switches and sides are made in place; save them when the window closes.
         Closing += (_, _) =>

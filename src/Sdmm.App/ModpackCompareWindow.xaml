@@ -54,6 +54,14 @@
                     <DataGridTextColumn Header="Mod" Binding="{Binding ModReference}" Width="200" />
                     <DataGridTextColumn x:Name="LeftColumn" Binding="{Binding LeftText}" Width="*" />
                     <DataGridTextColumn x:Name="RightColumn" Binding="{Binding RightText}" Width="*" />
+                    <DataGridTemplateColumn Header="Note" Width="150">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Note.Text}" Foreground="{Binding Note.Brush}" ToolTip="{Binding Note.Tip}"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontWeight="SemiBold" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="240">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">

@@ -2,6 +2,7 @@ using Sdmm.Core.Installs;
 using Sdmm.Core.Modpacks;
 using Sdmm.Core.Packaging;
 using Sdmm.Core.Smm;
+using Sdmm.Core.Versioning;
 
 namespace Sdmm.Core.Tests;
 
@@ -108,7 +109,7 @@ public class ModpackTests
             Mod("Extra", "1.0.0", ModOwner.Sdmm), Mod("SmmExtra", "1.0.0", ModOwner.Smm), Mod("Off", "1.0.0", ModOwner.Sdmm),
         };
 
-        var c = ModpackPlanner.Plan(pack, installed, isServer: false, removeOthers: true, useNewest: false);
+        var c = ModpackPlanner.Plan(pack, installed, isServer: false, removeOthers: true);
 
         Assert.Equal(["Older", "Missing"], c.Install.Select(m => m.ModReference));
         Assert.Equal(["Same", "Ranged"], c.Unchanged);
@@ -116,8 +117,12 @@ public class ModpackTests
         Assert.Equal(["Extra", "Off"], c.Remove.Order());
         Assert.Equal(["SmmExtra"], c.KeptForeign);
 
-        var newest = ModpackPlanner.Plan(pack, installed, isServer: false, removeOthers: false, useNewest: true);
-        Assert.Contains(newest.Install, m => m.ModReference == "Same");
+        // Updating: Same and Older to 2.1.0 are changes; a mod already at its target (Ranged) isn't reinstalled.
+        var targets = new Dictionary<string, SemVersion>(StringComparer.OrdinalIgnoreCase)
+            { ["Same"] = SemVersion.Parse("1.1.0"), ["Older"] = SemVersion.Parse("2.1.0"), ["ranged"] = SemVersion.Parse("1.3.0") };
+        var newest = ModpackPlanner.Plan(pack, installed, isServer: false, removeOthers: false, targets);
+        Assert.Equal(["Same", "Older", "Missing"], newest.Install.Select(m => m.ModReference));
+        Assert.Equal(["Ranged"], newest.Unchanged);
         Assert.Empty(newest.Remove);
     }
 

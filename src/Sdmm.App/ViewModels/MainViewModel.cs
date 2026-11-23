@@ -1172,6 +1172,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void ApplySmr(ModRow row)
     {
         if (!UseSmr || !_smrMods.TryGetValue(row.ModReference, out var smr)) return;
+        row.Branch = BranchOf(SelectedInstall);
         row.Smr = smr;
         if (_logos.TryGetValue(smr.Id, out var logo)) row.Logo = logo;
     }
@@ -2448,7 +2449,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
         // Applying makes it the active pack when it goes through; if it's cancelled, nothing changes.
-        await ApplyModpackAsync(pack, removeOthers: true, useNewest: false);
+        await ApplyModpackAsync(pack, removeOthers: true);
         RevertModpackChoice();
     }
 
@@ -2525,7 +2526,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Applies the active pack here (shows every change first).</summary>
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     private Task ApplyActiveModpackAsync() =>
-        ActivePackFor(SelectedInstall) is { } pack ? ApplyModpackAsync(pack, removeOthers: true, useNewest: false) : Task.CompletedTask;
+        ActivePackFor(SelectedInstall) is { } pack ? ApplyModpackAsync(pack, removeOthers: true) : Task.CompletedTask;
 
     /// <summary>Hides the banner until the differences change.</summary>
     [RelayCommand]
@@ -2548,10 +2549,139 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>The selected install's platform and game build, for exported files' "exported from" note.</summary>
     public Task<(ModTarget Target, long Changelist)?> GetExportOriginAsync() => GetSelectedTargetAsync();
 
-    public Task ApplyModpackAsync(Sdmm.Core.Modpacks.Modpack pack, bool removeOthers, bool useNewest) =>
-        RunBusy($"Applying modpack '{pack.Name}'…", () => ApplyModpackCoreAsync(pack, removeOthers, useNewest));
+    /// <summary>Whether the sources cover a repo: listed itself, or its owner is a user or organization being scanned.</summary>
+    public bool RepoInSources(string repo)
+    {
+        var s = _config.Sources;
+        var owner = repo.Split('/')[0];
+        return s.Repos.Contains(repo, StringComparer.OrdinalIgnoreCase) ||
+               s.Users.Contains(owner, StringComparer.OrdinalIgnoreCase) || s.Orgs.Contains(owner, StringComparer.OrdinalIgnoreCase);
+    }
 
-    private async Task ApplyModpackCoreAsync(Sdmm.Core.Modpacks.Modpack pack, bool removeOthers, bool useNewest)
+    /// <summary>Repos a modpack's GitHub mods come from that the sources don't cover.</summary>
+    public IReadOnlyList<string> ReposMissingFromSources(IEnumerable<Sdmm.Core.Modpacks.ModpackMod> mods) =>
+        mods.Where(m => m.Source == Sdmm.Core.Modpacks.ModpackSource.GitHub && m.Repo is { Length: > 0 })
+            .Select(m => m.Repo!).Distinct(StringComparer.OrdinalIgnoreCase).Where(r => !RepoInSources(r)).ToList();
+
+    /// <summary>
+    /// Asks whether to add repos a modpack needs to the sources (and adds them). Returns null when cancelled, true when
+    /// added, false when the user went on without them.
+    /// </summary>
+    public bool? OfferToAddSources(IReadOnlyList<string> repos, string continueLabel, string continueDetail)
+    {
+        if (repos.Count == 0) return false;
+        var pick = _dialogs.Choose("Repos that aren't in your sources",
+            $"This modpack has mods from GitHub {(repos.Count == 1 ? "a repo that isn't" : "repos that aren't")} in your mod sources:\n\n" +
+            string.Join("\n", repos.Select(r => "• " + r)) +
+            "\n\nSDMM can only install those mods after adding them. A private repo also needs a GitHub token that can see it (Settings → Mod sources).",
+            [
+                ("Add to my sources", "Adds them under Settings → Mod sources, so their releases are read like your other sources."),
+                (continueLabel, continueDetail),
+            ]);
+        if (pick is null) return null;
+        if (pick != 0) return false;
+        foreach (var r in repos.Where(r => !_config.Sources.Repos.Contains(r, StringComparer.OrdinalIgnoreCase))) _config.Sources.Repos.Add(r);
+        SaveConfig();
+        ReposText = string.Join(Environment.NewLine, _config.Sources.Repos);
+        OnPropertyChanged(nameof(HasSources));
+        Log($"Added to your sources: {string.Join(", ", repos)}.");
+        return true;
+    }
+
+    /// <summary>
+    /// Before applying: makes sure the GitHub repos the pack's mods come from have been read. Repos outside the sources
+    /// can be added; repos in the sources that this session hasn't read yet (or just added) are read now. False when
+    /// the user cancelled.
+    /// </summary>
+    private async Task<bool> EnsurePackSourcesAsync(IReadOnlyList<Sdmm.Core.Modpacks.ModpackMod> mods)
+    {
+        var repos = mods.Where(m => m.Source == Sdmm.Core.Modpacks.ModpackSource.GitHub && m.Repo is { Length: > 0 })
+            .Select(m => m.Repo!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var unread = repos.Where(r => _discovery?.ScannedRepos.Contains(r, StringComparer.OrdinalIgnoreCase) != true).ToList();
+        if (unread.Count == 0) return true;
+        if (OfferToAddSources(ReposMissingFromSources(mods), "Apply without them",
+                "Those mods are left out and listed; the rest of the modpack is applied.") is null)
+            return false;
+        if (unread.Any(RepoInSources))
+        {
+            Status = "Checking GitHub…";
+            await RefreshFromGitHubForSync();
+            await BuildRowsAsync(reuseScan: true);   // the list shows the new repos' mods (no re-read of the install)
+        }
+        return true;
+    }
+
+    private readonly Dictionary<string, GameBranch> _branches = [];
+
+    /// <summary>The install's game branch (from Steam's or Epic's records), cached; unknown for hosted servers.</summary>
+    public GameBranch BranchOf(InstallItem? item)
+    {
+        if (item is null || item.IsRemote) return GameBranch.Unknown;
+        if (_branches.TryGetValue(item.Config.Key, out var b)) return b;
+        IReadOnlyList<FoundGame> epic = [];
+        try
+        {
+            epic = GameLocator.FindEpic(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Epic", "EpicGamesLauncher", "Data", "Manifests"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+        return _branches[item.Config.Key] = GameBranchDetector.Detect(item.Config.Path, epic);
+    }
+
+    /// <summary>
+    /// SMR's listing for these mods, from what's already been looked up plus one request for the rest. Empty when SMR
+    /// listings are turned off; lookup failures are logged and leave those mods out.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, Sdmm.Core.Smr.SmrMod>> GetSmrInfoAsync(IEnumerable<string> refs)
+    {
+        if (!UseSmr) return new Dictionary<string, Sdmm.Core.Smr.SmrMod>();
+        var all = refs.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var ask = all.Where(r => !_smrLookedUp.Contains(r)).ToList();
+        if (ask.Count > 0)
+        {
+            try
+            {
+                using var smr = new Sdmm.Core.Smr.SmrClient();
+                var found = await smr.GetModsAsync(ask);
+                foreach (var r in ask) _smrLookedUp.Add(r);
+                foreach (var (r, mod) in found) _smrMods[r] = mod;
+            }
+            catch (Sdmm.Core.Smr.SmrException ex)
+            {
+                Log("SMR lookup skipped: " + ex.Message);
+            }
+        }
+        return all.Where(_smrMods.ContainsKey).ToDictionary(r => r, r => _smrMods[r], StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// For a confirmation about to install mods from SMR: the ones SMR reports as broken or damaged on this install's
+    /// branch, as a paragraph to add. Null when there are none (or SMR listings are off).
+    /// </summary>
+    private async Task<string?> SmrWarningAsync(InstallItem item, IEnumerable<string> refs)
+    {
+        var list = refs.ToList();
+        if (list.Count == 0) return null;
+        var branch = BranchOf(item);
+        var reports = (await GetSmrInfoAsync(list)).Values.Select(m => Sdmm.Core.Smr.SmrReport.For(m, branch))
+            .OfType<Sdmm.Core.Smr.SmrReport>().OrderByDescending(r => r.Level).ThenBy(r => r.ModReference, StringComparer.OrdinalIgnoreCase).ToList();
+        return reports.Count == 0 ? null
+            : "⚠ SMR reports problems with:\n" + string.Join("\n", reports.Select(r =>
+                $"• {r.ModReference}: {(r.Level == Sdmm.Core.Smr.SmrReportLevel.Broken ? "broken" : "damaged")} on {r.BranchName}" +
+                (r.Note is { Length: > 0 } n ? $" ({n})" : "")));
+    }
+
+    public Task ApplyModpackAsync(Sdmm.Core.Modpacks.Modpack pack, bool removeOthers) =>
+        RunBusy($"Applying modpack '{pack.Name}'…", () => ApplyModpackCoreAsync(pack, removeOthers));
+
+    /// <summary>
+    /// Applies a modpack to the selected install. Before planning it makes sure the pack's GitHub repos have been read
+    /// (offering to add ones that aren't in the sources), and when newer versions exist than the pack saved, asks once
+    /// whether to keep the saved versions or update. Mods that still can't be found are left out and listed, rather
+    /// than stopping the whole pack.
+    /// </summary>
+    private async Task ApplyModpackCoreAsync(Sdmm.Core.Modpacks.Modpack pack, bool removeOthers)
     {
         var item = SelectedInstall ?? throw new InvalidOperationException("Pick a game or server first.");
         bool variant = Brand.Current.IsVariant;
@@ -2560,32 +2690,90 @@ public sealed partial class MainViewModel : ObservableObject
             using var o = Open(item);
             return (o.Install.Detect(), ModScanner.Scan(o.Install.FileSystem));
         });
-        var changes = Sdmm.Core.Modpacks.ModpackPlanner.Plan(pack, installed, item.IsServer, removeOthers, useNewest);
-        var skipped = changes.Skipped.Select(x => $"{x.Mod} ({x.Why})").ToList();
-        var problems = new List<string>();
+        var wantedHere = pack.Mods.Where(m => m.Enabled && m.AppliesTo(item.IsServer)).ToList();
+        if (!await EnsurePackSourcesAsync(wantedHere)) return;
 
-        // Dev builds and imported zips, from the sources and imported zips SDMM knows.
         var all = AllMods().ToDictionary(m => m.ModReference, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<ModBuild> Candidates(Sdmm.Core.Modpacks.ModpackMod m) =>
+            Sdmm.Core.Modpacks.ModpackVersions.Candidates(all.TryGetValue(m.ModReference, out var dm) ? dm : null, m, info.Target);
+
+        // Newer versions than the pack saved: GitHub builds (following the pre-release setting) and, where SMR installs
+        // are available, SMR releases that fit this install.
+        using var smr = CreateSmr();
+        var smrVersions = new Dictionary<string, IReadOnlyList<Sdmm.Core.Smr.SmrVersion>>(StringComparer.OrdinalIgnoreCase);
+        async Task<IReadOnlyDictionary<string, IReadOnlyList<Sdmm.Core.Smr.SmrVersion>>> FetchSmr(IReadOnlyCollection<string> refs)
+        {
+            var missing = refs.Where(r => !smrVersions.ContainsKey(r)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (missing.Count > 0)
+            {
+                var got = await smr.GetVersionsAsync(missing);
+                foreach (var r in missing) smrVersions[r] = got.TryGetValue(r, out var list) ? list : [];
+            }
+            return smrVersions;
+        }
+        var newer = wantedHere.Where(m => m.Source != Sdmm.Core.Modpacks.ModpackSource.Smr)
+            .Select(m => Sdmm.Core.Modpacks.ModpackVersions.Newer(Candidates(m), m, IncludePrereleases))
+            .OfType<Sdmm.Core.Modpacks.ModpackNewerVersion>().ToList();
+        var smrWanted = variant ? wantedHere.Where(m => m.Source == Sdmm.Core.Modpacks.ModpackSource.Smr).ToList() : [];
+        if (smrWanted.Count > 0)
+        {
+            Status = "Checking SMR for newer versions…";
+            await FetchSmr(smrWanted.Select(m => m.ModReference).ToList());
+            foreach (var m in smrWanted)
+                if (Sdmm.Core.Modpacks.ModpackVersions.Saved(m) is { } saved &&
+                    Sdmm.Core.Smr.SmrResolver.Newest(smrVersions[m.ModReference], info.Target, info.Changelist,
+                        m.Constraint is { } c && Sdmm.Core.Versioning.VersionRange.TryParse(c, out var r, out _) ? r : null) is { } nv &&
+                    nv.Version > saved)
+                    newer.Add(new Sdmm.Core.Modpacks.ModpackNewerVersion(m.ModReference, saved, nv.Version));
+        }
+        var targets = new Dictionary<string, Sdmm.Core.Versioning.SemVersion>(StringComparer.OrdinalIgnoreCase);
+        if (newer.Count > 0)
+        {
+            var lines = string.Join("\n", newer.OrderBy(n => n.ModReference, StringComparer.OrdinalIgnoreCase)
+                .Select(n => $"• {n.ModReference}: saved {n.Saved}, newest {n.Newest}"));
+            var pick = _dialogs.Choose("Newer versions available",
+                $"'{pack.Name}' saved {(newer.Count == 1 ? "an older version of 1 mod" : $"older versions of {newer.Count} mods")} than {(newer.Count == 1 ? "is" : "are")} available now:\n\n{lines}",
+                [
+                    ("Update to the newest", "Install the newer versions. The modpack is updated to them too."),
+                    ("Keep the saved versions", "Install the versions the modpack saved."),
+                ]);
+            if (pick is null) return;
+            if (pick == 0) foreach (var n in newer) targets[n.ModReference] = n.Newest;
+        }
+
+        var changes = Sdmm.Core.Modpacks.ModpackPlanner.Plan(pack, installed, item.IsServer, removeOthers, targets);
+        var skipped = changes.Skipped.Select(x => $"{x.Mod} ({x.Why})").ToList();
+        // After choosing to update: the pack saves the newer versions of the mods that are now at them.
+        void SaveNewerVersions(IEnumerable<string> nowAtTarget)
+        {
+            var done = nowAtTarget.Where(targets.ContainsKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var entries = pack.Mods.Where(m => done.Contains(m.ModReference) && m.Version != targets[m.ModReference].ToString()).ToList();
+            if (entries.Count == 0) return;
+            foreach (var m in entries) m.Version = targets[m.ModReference].ToString();
+            SaveConfig();
+            Log($"Modpack '{pack.Name}' now saves the newer versions of {string.Join(", ", entries.Select(m => m.ModReference))}.");
+        }
+        var problems = new List<string>();
+        var notFound = new List<string>();
+
+        // Dev builds and imported zips, from the sources and imported zips SDMM knows. One that can't be found is left
+        // out (and listed), so the rest of the pack can still be applied.
         var builds = new List<ModBuild>();
         foreach (var m in changes.Install.Where(m => m.Source != Sdmm.Core.Modpacks.ModpackSource.Smr))
         {
-            var candidates = (all.TryGetValue(m.ModReference, out var dm) ? dm.Builds : [])
-                .Where(b => b.Version is not null && b.Assets.ContainsKey(info.Target) &&
-                            (m.Source == Sdmm.Core.Modpacks.ModpackSource.Imported ? b.IsImported : !b.IsImported && b.RepoFullName.Equals(m.Repo, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-            ModBuild? build = !useNewest && m.Version is { } wanted && Sdmm.Core.Versioning.SemVersion.TryParse(wanted, out var wv)
-                ? candidates.FirstOrDefault(b => b.Version == wv)
-                : candidates.Where(b => m.Constraint is null || (Sdmm.Core.Versioning.VersionRange.TryParse(m.Constraint, out var r, out _) && r!.Matches(b.Version!)))
-                    .OrderByDescending(b => b.Version).FirstOrDefault();
-            if (build is null)
-                problems.Add($"{m.ModReference} {m.Version ?? m.Constraint ?? ""}: no {info.Target} build " +
-                             (m.Source == Sdmm.Core.Modpacks.ModpackSource.Imported ? "among your imported zips." : $"in {m.Repo}'s releases (check that it's in your sources)."));
-            else builds.Add(build);
+            var version = targets.TryGetValue(m.ModReference, out var t) ? t : Sdmm.Core.Modpacks.ModpackVersions.Saved(m);
+            var build = Sdmm.Core.Modpacks.ModpackVersions.Pick(Candidates(m), m, version, IncludePrereleases);
+            if (build is not null) builds.Add(build);
+            else if (m.Source == Sdmm.Core.Modpacks.ModpackSource.Imported)
+                notFound.Add($"{m.ModReference} {m.Version ?? m.Constraint ?? ""}: no {info.Target} build among your imported zips");
+            else if (m.Repo is { } repo && _discovery?.ScannedRepos.Contains(repo, StringComparer.OrdinalIgnoreCase) != true)
+                notFound.Add($"{m.ModReference}: from {repo}, which {(RepoInSources(repo) ? "couldn't be read (a private repo needs a token that can see it)" : "isn't in your sources")}");
+            else
+                notFound.Add($"{m.ModReference} {m.Version ?? m.Constraint ?? ""}: no {info.Target} build in {m.Repo}'s releases");
         }
 
         // SMR mods: resolved with their dependencies (when SMR installs are available).
         var smrMods = changes.Install.Where(m => m.Source == Sdmm.Core.Modpacks.ModpackSource.Smr).ToList();
-        using var smr = CreateSmr();
         Sdmm.Core.Smr.SmrInstallPlan? smrPlan = null;
         if (!variant)
             skipped.AddRange(smrMods.Select(m => $"{m.ModReference} (comes from SMR; install it with SMM)"));
@@ -2593,9 +2781,9 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Status = "Resolving dependencies on SMR…";
             var requests = smrMods.Select(m => new Sdmm.Core.Smr.SmrRequest(m.ModReference,
-                !useNewest && m.Version is { } v && Sdmm.Core.Versioning.SemVersion.TryParse(v, out var sv) ? sv : null,
+                targets.TryGetValue(m.ModReference, out var t) ? t : Sdmm.Core.Modpacks.ModpackVersions.Saved(m),
                 m.Constraint is { } c && Sdmm.Core.Versioning.VersionRange.TryParse(c, out var range, out _) ? range : null)).ToList();
-            smrPlan = await Sdmm.Core.Smr.SmrResolver.ResolveAsync(requests, info.Target, info.Changelist, installed, async refs => await smr.GetVersionsAsync(refs));
+            smrPlan = await Sdmm.Core.Smr.SmrResolver.ResolveAsync(requests, info.Target, info.Changelist, installed, FetchSmr);
             problems.AddRange(smrPlan.Problems);
         }
         if (problems.Count > 0)
@@ -2611,7 +2799,10 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (builds.Count + smrInstall.Count + remove.Count == 0)
         {
-            _dialogs.Info("Apply modpack", $"'{item.Name}' already matches '{pack.Name}'." +
+            SaveNewerVersions(changes.Unchanged);
+            _dialogs.Info("Apply modpack", (notFound.Count > 0
+                              ? $"Nothing else to change on '{item.Name}'. These mods from '{pack.Name}' can't be installed:\n\n{string.Join("\n", notFound.Select(n => "• " + n))}"
+                              : $"'{item.Name}' already matches '{pack.Name}'.") +
                           (skipped.Count > 0 ? $"\n\nSkipped: {string.Join(", ", skipped)}" : ""));
             return;
         }
@@ -2630,7 +2821,10 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var v in smrInstall) text.Append($"\n• {v.ModReference} {v.Version} from SMR{Current(v.ModReference)}");
         if (remove.Count > 0) text.Append($"\n\nRemove (not in the modpack): {string.Join(", ", remove)}");
         if (DependentsWarning(installed, remove) is { } depWarning) text.Append("\n\n" + depWarning);
+        if (notFound.Count > 0)
+            text.Append($"\n\nCan't be installed, left out:\n{string.Join("\n", notFound.Select(n => "• " + n))}\nMods that need them won't load until they're installed.");
         if (skipped.Count > 0) text.Append($"\n\nSkipped: {string.Join(", ", skipped)}");
+        if (await SmrWarningAsync(item, smrInstall.Select(v => v.ModReference)) is { } smrWarning) text.Append("\n\n" + smrWarning);
         if (changes.KeptForeign.Count > 0) text.Append($"\n\nLeft alone (not in the modpack, but installed by SMM, the host or by hand): {string.Join(", ", changes.KeptForeign)}");
         if (takeOver.Count > 0) text.Append($"\n\nTaken over first: {string.Join(", ", takeOver)}" + (profiles.Count > 0 ? $" (also removed from SMM profiles {string.Join(", ", profiles)})" : ""));
         if (DiskSpaceWarning(item, smrInstall.Sum(v => v.Targets[info.Target].Size ?? 0) + builds.Sum(b => b.Assets[info.Target].Size)) is { } space)
@@ -2677,8 +2871,10 @@ public sealed partial class MainViewModel : ObservableObject
         {
             _quietInstallResults = false;
         }
-        Log($"Applied modpack '{pack.Name}' to {item.Name}: {installRequests.Count} installed or changed, {remove.Count} removed, {skipped.Count} skipped.");
+        Log($"Applied modpack '{pack.Name}' to {item.Name}: {installRequests.Count} installed or changed, {remove.Count} removed, {skipped.Count + notFound.Count} skipped.");
         SetActiveModpack(item, pack);
+        // Updated to newer versions: the pack keeps them, as it would for any update made while it's followed.
+        SaveNewerVersions(changes.Unchanged.Concat(installRequests.Select(r => r.Package.ModReference)));
         if (item.IsServer && installRequests.Count + remove.Count > 0)
             _dialogs.Info("Modpack applied", $"Applied '{pack.Name}' to the server '{item.Name}'.\n\n" +
                 (item.IsRemote ? "Start (or restart) it from your host's panel so it loads the changes." : "Restart it so it loads the changes."));
@@ -2868,8 +3064,11 @@ public sealed partial class MainViewModel : ObservableObject
                         (profiles.Count > 0 ? $" and removes {(plan.TakeOver.Count == 1 ? "it" : "them")} from your SMM profiles ({string.Join(", ", profiles)}; profiles.json is backed up)." : "."));
         if (item.IsServer) text.Append("\n\n" + ServerNote(item));
         if (DiskSpaceWarning(item, bytes) is { } space) text.Append("\n\n" + space);
-        // A caller that already confirmed (server sync) still gets asked when dependencies or takeovers were added.
-        bool extra = plan.ToInstall.Count > requests.Count || plan.TakeOver.Count > 0;
+        // SMR's own reports of mods that don't work with the current game: always asked about.
+        var smrWarning = await SmrWarningAsync(item, plan.ToInstall.Select(v => v.ModReference));
+        if (smrWarning is not null) text.Append("\n\n" + smrWarning);
+        // A caller that already confirmed (server sync) still gets asked when dependencies, takeovers or SMR warnings were added.
+        bool extra = plan.ToInstall.Count > requests.Count || plan.TakeOver.Count > 0 || smrWarning is not null;
         if ((askFirst || extra) && !_dialogs.Confirm("Install from SMR", text.ToString())) return;
 
         // Check the server can be changed and download (verified against SMR's hashes) before any takeover, so a locked

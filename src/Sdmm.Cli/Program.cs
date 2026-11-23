@@ -664,23 +664,29 @@ internal sealed class Cli(AppConfig cfg, string configPath, Args a)
               ?? throw new CliException($"No modpack called '{arg}' (saved: {string.Join(", ", cfg.Modpacks.Select(p => $"'{p.Name}'"))}), and no such file.", Exit.Usage);
         var c = Pick(a.On);
         var (info, installed) = Read(c);
-        var changes = ModpackPlanner.Plan(pack, installed, IsServer(c), a.RemoveOthers, a.Newest);
+        var all = (await ModsAsync()).ToDictionary(m => m.ModReference, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<ModBuild> Candidates(ModpackMod m) =>
+            ModpackVersions.Candidates(all.TryGetValue(m.ModReference, out var dm) ? dm : null, m, info.Target);
+        // --newest: newer builds than the saved versions, following the prerelease setting (SMR mods are SMM's).
+        var targets = new Dictionary<string, SemVersion>(StringComparer.OrdinalIgnoreCase);
+        if (a.Newest)
+            foreach (var m in pack.Mods.Where(m => m.Enabled && m.Source != ModpackSource.Smr && m.AppliesTo(IsServer(c))))
+                if (ModpackVersions.Newer(Candidates(m), m, IncludePrereleases) is { } newer)
+                {
+                    targets[m.ModReference] = newer.Newest;
+                    Say($"Newer: {m.ModReference} {newer.Saved} -> {newer.Newest}");
+                }
+        var changes = ModpackPlanner.Plan(pack, installed, IsServer(c), a.RemoveOthers, targets);
         var skipped = changes.Skipped.Select(x => $"{x.Mod} ({x.Why})").ToList();
         skipped.AddRange(changes.Install.Where(m => m.Source == ModpackSource.Smr).Select(m => $"{m.ModReference} (install it with SMM)"));
-        var all = (await ModsAsync()).ToDictionary(m => m.ModReference, StringComparer.OrdinalIgnoreCase);
         var builds = new List<ModBuild>();
         var problems = new List<string>();
         foreach (var m in changes.Install.Where(m => m.Source != ModpackSource.Smr))
         {
-            var candidates = (all.TryGetValue(m.ModReference, out var dm) ? dm.Builds : [])
-                .Where(b => b.Version is not null && b.Assets.ContainsKey(info.Target) &&
-                            (m.Source == ModpackSource.Imported ? b.IsImported : !b.IsImported && b.RepoFullName.Equals(m.Repo, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-            ModBuild? build = !a.Newest && m.Version is { } wanted && SemVersion.TryParse(wanted, out var wv)
-                ? candidates.FirstOrDefault(b => b.Version == wv)
-                : candidates.Where(b => m.Constraint is null || (VersionRange.TryParse(m.Constraint, out var r, out _) && r!.Matches(b.Version!)))
-                    .OrderByDescending(b => b.Version).FirstOrDefault();
-            if (build is null) problems.Add($"{m.ModReference} {m.Version ?? m.Constraint ?? ""}: no {info.Target} build in your sources or imported zips.");
+            var version = targets.TryGetValue(m.ModReference, out var t) ? t : ModpackVersions.Saved(m);
+            var build = ModpackVersions.Pick(Candidates(m), m, version, IncludePrereleases);
+            if (build is null) problems.Add($"{m.ModReference} {m.Version ?? m.Constraint ?? ""}: no {info.Target} build in your sources or imported zips." +
+                                            (m.Source == ModpackSource.GitHub && !all.ContainsKey(m.ModReference) ? $" Add {m.Repo} to your sources in the app." : ""));
             else builds.Add(build);
         }
         foreach (var p in problems) Say("Problem: " + p);

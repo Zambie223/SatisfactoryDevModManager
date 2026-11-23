@@ -7,9 +7,12 @@ namespace Sdmm.App.ViewModels;
 /// <summary>One mod in the Compare window: what each pack has, and how they differ.</summary>
 public sealed class ModpackCompareRow
 {
-    public ModpackCompareRow(ModpackDiffLine line, string leftName, string rightName)
+    public ModpackCompareRow(ModpackDiffLine line, string leftName, string rightName, Func<ModpackMod, ModpackModStatus?>? status = null)
     {
         Line = line;
+        // The most serious note from either side (an SMR report, or a repo that isn't in the sources).
+        Note = new[] { line.Left, line.Right }.OfType<ModpackMod>().Select(m => status?.Invoke(m)).OfType<ModpackModStatus>()
+            .OrderByDescending(s => s.Severity).FirstOrDefault();
         LeftText = Describe(line.Left);
         RightText = Describe(line.Right);
         StatusText = line.Kind switch
@@ -27,6 +30,7 @@ public sealed class ModpackCompareRow
     public string LeftText { get; }
     public string RightText { get; }
     public string StatusText { get; }
+    public ModpackModStatus? Note { get; }
 
     /// <summary>"1.2.0 · SMR", plus the side when it isn't both and "(off)" when switched off; a dash when missing.</summary>
     private static string Describe(ModpackMod? m)
@@ -56,9 +60,11 @@ public enum ModpackCompareFilter { All, OnlyLeft, OnlyRight, Both }
 public sealed partial class ModpackCompareViewModel : ObservableObject
 {
     private IReadOnlyList<ModpackCompareRow> _all = [];
+    private readonly Func<ModpackMod, ModpackModStatus?>? _status;
 
-    public ModpackCompareViewModel(IReadOnlyList<Modpack> packs, Modpack? left)
+    public ModpackCompareViewModel(IReadOnlyList<Modpack> packs, Modpack? left, Func<ModpackMod, ModpackModStatus?>? status = null)
     {
+        _status = status;
         Packs = packs;
         Left = left ?? packs.FirstOrDefault();
         Right = packs.FirstOrDefault(p => p != Left) ?? Left;
@@ -112,7 +118,7 @@ public sealed partial class ModpackCompareViewModel : ObservableObject
     {
         _all = Left is null || Right is null
             ? []
-            : ModpackDiff.Compare(Left, Right).Select(l => new ModpackCompareRow(l, LeftName, RightName)).ToList();
+            : ModpackDiff.Compare(Left, Right).Select(l => new ModpackCompareRow(l, LeftName, RightName, _status)).ToList();
         int differ = Count(ModpackDiffKind.Different);
         int both = differ + Count(ModpackDiffKind.Same);
         Summary = Left is null || Right is null ? ""

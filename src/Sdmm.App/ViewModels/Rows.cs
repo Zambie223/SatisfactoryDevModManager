@@ -349,7 +349,31 @@ public sealed partial class ModRow : ObservableObject
     /// </summary>
     public bool CanTakeOver => IsManagedElsewhere && Installed?.Descriptor is not null && Problems.All(p => p.Code != "DUPLICATE");
 
-    public bool HasProblems => Problems.Count > 0;
+    public bool HasProblems => Problems.Count > 0 || SmrProblem is not null;
+
+    /// <summary>The install's game branch, for picking SMR's report (set by the list before <see cref="Smr"/>).</summary>
+    public GameBranch Branch { get; set; }
+
+    /// <summary>
+    /// The installed copy is a dev build (from GitHub or an imported zip). SMR's reports are about its published release,
+    /// so they don't apply to these.
+    /// </summary>
+    public bool IsDevBuildCopy => Installed is { Owner: ModOwner.Sdmm } i && !IsFromSmr && i.Marker?.IsAdoptedCopy != true;
+
+    /// <summary>
+    /// SMR's report that the installed mod is broken or damaged on this install's branch, for copies that came from SMR
+    /// (installed by SMM, the host, by hand, or from SMR). Null when SMR reports no problem.
+    /// </summary>
+    public Sdmm.Core.Smr.SmrReport? SmrProblem =>
+        Smr is not null && Installed?.Descriptor is not null && !IsDevBuildCopy ? Sdmm.Core.Smr.SmrReport.For(Smr, Branch) : null;
+
+    /// <summary>Red for a mod SMR reports as broken, otherwise the warning colour.</summary>
+    public System.Windows.Media.Brush ProblemBrush => (System.Windows.Media.Brush)System.Windows.Application.Current.Resources[
+        SmrProblem?.Level == Sdmm.Core.Smr.SmrReportLevel.Broken ? "BadBrush" : "WarnBrush"];
+
+    private IEnumerable<(string Short, string Message)> AllProblems =>
+        (SmrProblem is { } r ? [(r.Short, r.Message)] : Array.Empty<(string, string)>())
+        .Concat(Problems.Select(p => (p.Short, p.Message)));
 
     /// <summary>A required dependency is missing or the wrong version (offers "Install missing dependencies").</summary>
     public bool HasUnmetDependencies => Problems.Any(p => p.Code is "DEPENDENCY_MISSING" or "DEPENDENCY_VERSION");
@@ -358,10 +382,10 @@ public sealed partial class ModRow : ObservableObject
     public bool SmmWillReplace => Problems.Any(p => p.Code == "SMM_WILL_REPLACE");
 
     /// <summary>The first problem in a few words, for the list ("Needs SML ^3.12.0 (+1 more)").</summary>
-    public string ProblemShort => Problems.Count == 0 ? "" : Problems[0].Short + (Problems.Count > 1 ? $" (+{Problems.Count - 1} more)" : "");
+    public string ProblemShort => AllProblems.ToList() is { Count: > 0 } all ? all[0].Short + (all.Count > 1 ? $" (+{all.Count - 1} more)" : "") : "";
 
     /// <summary>Every problem, explained, for the details panel.</summary>
-    public string ProblemsText => string.Join("\n\n", Problems.Select(p => "• " + p.Message));
+    public string ProblemsText => string.Join("\n\n", AllProblems.Select(p => "• " + p.Message));
 
     /// <summary>Tooltip on the Install buttons: why it's disabled, when it is.</summary>
     public string InstallTip => UseSmrSource
@@ -448,7 +472,8 @@ public sealed partial class ModRow : ObservableObject
         nameof(SmrReleaseText), nameof(SmrCompatText), nameof(SmrTagsText), nameof(SmrFullDescription), nameof(SmrPageUrl), nameof(SmrComparisonText),
         nameof(SmrUpdateVersion), nameof(State), nameof(StateText), nameof(StateBrush), nameof(Owner), nameof(ByText), nameof(CanHandBack), nameof(HandBackTo), nameof(HandBackText), nameof(HandBackTip),
         nameof(CanChooseSource), nameof(CanInstall), nameof(ActionText), nameof(InstallSourceText), nameof(InstallTip), nameof(ReleaseNotes),
-        nameof(AvailableText), nameof(NewestReleaseDate), nameof(SourceLine))]
+        nameof(AvailableText), nameof(NewestReleaseDate), nameof(SourceLine),
+        nameof(SmrProblem), nameof(HasProblems), nameof(ProblemShort), nameof(ProblemsText), nameof(ProblemBrush))]
     private Sdmm.Core.Smr.SmrMod? _smr;
 
     /// <summary>Installed from SMR by SDMM (the marker's source is "ficsit.app/&lt;ModRef&gt;").</summary>

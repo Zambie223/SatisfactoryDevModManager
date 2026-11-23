@@ -7,11 +7,11 @@ namespace Sdmm.App;
 /// <summary>The Compare window (see <see cref="ModpackCompareViewModel"/>).</summary>
 public partial class ModpackCompareWindow : Window
 {
-    public ModpackCompareWindow(IReadOnlyList<Modpack> packs, Modpack? left)
+    public ModpackCompareWindow(IReadOnlyList<Modpack> packs, Modpack? left, Func<ModpackMod, ModpackModStatus?>? status = null)
     {
         InitializeComponent();
         DarkTitleBar.Enable(this);
-        var vm = new ModpackCompareViewModel(packs, left);
+        var vm = new ModpackCompareViewModel(packs, left, status);
         DataContext = vm;
         // DataGrid column headers aren't in the visual tree, so they can't bind to the pack names; set them here.
         void Headers()
